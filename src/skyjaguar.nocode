@@ -1,0 +1,9 @@
+# Zonas que NO son codigo aunque el trazado pueda entrar en ellas.
+# Cada una con su razon. De momento, ninguna.
+
+# TABLAS DE SALTOS EN LINEA. El despachador 0x4071 hace `pop hl` para coger la
+# direccion de retorno, o sea el byte de despues del CALL: la tabla va PEGADA
+# al CALL, en el propio flujo de codigo. Hay que declararla como datos para que
+# el trazado no la lea como instrucciones.
+0x40C9 0x40D9   # tabla de la maquina de estados principal (8 estados)
+0x535F 0x5389   # tabla de rutinas de objeto (21 entradas), la indexa 0x5351

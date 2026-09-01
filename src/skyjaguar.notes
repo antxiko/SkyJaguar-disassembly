@@ -1,0 +1,2045 @@
+# Anotaciones de Sky Jaguar (Konami, 1984, MSX1, cartucho RC-721).
+#
+# Cada linea va anclada a una direccion, asi que los comentarios sobreviven a
+# un retrazado. Directivas: L=etiqueta, C=comentario de linea, B=cabecera de
+# bloque, D=rango de datos, F=anchura de las filas de un bloque de datos. Todo
+# sale de leer el codigo que lo usa. Sin acentos a proposito.
+#
+# EL CARTUCHO. 16 KB en la pagina 1 (0x4000-0x7FFF). La cabecera AB declara
+# solo INIT (0x4010); STATEMENT, DEVICE y TEXT van a cero. NO lleva la marca
+# oculta de Konami: la ROM llega llena hasta 0x7FFB y solo hay cuatro bytes de
+# relleno 0xFF, asi que no hay sitio para ella.
+#
+# EL ARMAZON. INIT deja un jp 0x4043 en el gancho H.KEYI (0xFD9A) y cae en un
+# jr a si mismo (0x4041): el juego entero corre DENTRO de la interrupcion, un
+# paso por fotograma. Es el armazon que Konami repite desde 1983: despachador
+# de estados con pop hl / add a,a / jp (hl) (0x4071), mandos leidos por el PSG
+# y por las filas 7 y 8 del teclado (0x4479), y reproductor de sonido de tres
+# canales (0x79D8). La pila arranca en 0xE400 y la RAM de trabajo,
+# 0xE000-0xE3FF, se borra de un ldir.
+#
+# LA VRAM. SCREEN 2 con los tres tercios cargados iguales. Los ocho registros
+# salen de 0x443D (02 E2 0E 7F 07 76 03 E0), y de ellos:
+#     0x0000-0x17FF  tabla de colores        (registro 3 = 0x7F)
+#     0x1800-0x1FFF  patrones de sprite      (registro 6 = 0x03), 16x16
+#     0x2000-0x37FF  tabla de patrones       (registro 4 = 0x07)
+#     0x3800-0x3AFF  tabla de nombres        (registro 2 = 0x0E)
+#     0x3B00-0x3B7F  atributos de sprite     (registro 5 = 0x76)
+# Reparto de los 256 caracteres:
+#     0x00-0x0F  caracteres LISOS: el patron se queda a cero y 0x4B71 le da a
+#                cada uno un color entero (0x00, 0x11, 0x22 ... 0xFF). Son el
+#                mar y los llanos del fondo.
+#     0x10-0x59  la fuente y los adornos del panel (0x4BAB -> 0x2080)
+#     0x40-0xA7  los caracteres del paisaje (0x6DCA -> 0x2200)
+#     0xB0-0xEC  el enemigo grande (0x70DE o 0x7323 -> 0x2580). Solo los usan
+#                las tiras de fondo de tipo 18 y 19, que estan en el mapa una
+#                sola vez cada una (indices 0x4A y 0xEA): el CUERPO del bicho
+#                lo dibuja el propio fondo al pasar por delante.
+#     0xC0-0xE7  el rotulo del titulo (0x4D61 -> 0x2600), que pisa a los del
+#                paisaje: solo conviven porque el titulo y la partida no se
+#                ensenan a la vez.
+# La pantalla de juego es de 23 columnas (de la 1 a la 23); las ocho de la
+# derecha son el panel: SCORE, HI, SCENE, REST y (c) KONAMI 1984.
+# La fuente empieza en 0x10: 0x10-0x19 son las cifras, 0x21-0x3A las letras y
+# 0x00 el espacio.
+#
+# LOS DOS DESCOMPRESORES
+#   0x439C  a la VRAM. Un byte de mando: 0x00 fin; 0x80 empieza otro bloque y
+#           lee detras la direccion de VRAM (dos bytes); de 0x81 a 0xFF copia
+#           tal cual los (n y 0x7F) bytes que siguen; de 0x01 a 0x7F repite n
+#           veces el byte siguiente. 0x4396 es la misma entrada, leyendo antes
+#           la direccion de VRAM del propio guion; 0x4408 la repite en los tres
+#           tercios de la pantalla.
+#   0x43D8  a la tabla de nombres. Empieza por la direccion (dos bytes) y luego
+#           un byte por celda; 0xFE empieza otro bloque, 0xFF acaba. Entrando
+#           por 0x43F3 escribe CEROS en vez de los bytes, o sea que el mismo
+#           guion sirve para pintar un rotulo y para borrarlo.
+#
+# LA FASE Y COMO SE DIBUJA (0x5837, una vez cada 16 fotogramas)
+#   0xE1B8/B9 es la posicion en la fase, de 0 a 0x780 (1920); sube de uno en uno
+#   por redibujado y al llegar al final vuelve a cero, sube la dificultad
+#   (0xE1D3, tope 2) y suma una escena. UNA POSICION ES UNA FILA de caracteres.
+#     - 0x58FF es EL MAPA: 244 bytes, un codigo de tira (0..19) por cada OCHO
+#       filas. El indice es la posicion dividida entre ocho.
+#     - cada codigo lleva a 0x59F3 (20 punteros, uno por tipo de tira) y de ahi
+#       a una subtabla de OCHO punteros (0x5A1B + 0x10*tipo). El octavo indice
+#       es 2*(posicion y 7): son las ocho maneras de empezar la misma tira
+#       DESPLAZADA de 0 a 7 filas, que es lo que hace el desplazamiento fino.
+#     - cada tira es un guion comprimido, de 0x5B5B en adelante, que se vuelca
+#       en la tabla de nombres de ABAJO ARRIBA desde 0x3AE1: 0x00 acaba la fila
+#       y sube una, los valores con el bit 7 puesto copian tal cual (n y 0x7F)
+#       bytes, de 1 a 0x7F repiten el siguiente, y 0xFF acaba la tira y pide la
+#       siguiente del mapa.
+#     - se leen CUATRO codigos del mapa y se para a las 24 filas: comprobado
+#       reproduciendo el algoritmo byte a byte para las 1920 posiciones, todas
+#       dan 24 filas de 23 columnas exactas.
+#
+# EL MAPA DE LA RAM (lo que se ha podido atar leyendo quien escribe cada byte)
+#   E000 estado (0..7, indice de la tabla 0x40C9)   E001 subestado (lo cuentan
+#        los djnz encadenados de cada estado)
+#   E002 bits de partida: el 6 dice que hay partida en marcha
+#   E003 contador de fotogramas   E004 cuenta atras de espera
+#   E006 candado de reentrada de la interrupcion
+#   E008/E009 mandos: antes / recien pulsados   E00A los que usa el avion
+#   E00C paso del guion del demo   E00D/E00E cortinilla de la pantalla de titulo
+#   E018-E03B los tres canales de sonido, DOCE bytes cada uno (A, B y C); el
+#        codigo del sonido de cada canal esta en 0xE01A, 0xE026 y 0xE032, y
+#        0xE03C es el byte de mezcla que va al registro 7 del PSG
+#   E040 pantalla del titulo que toca ensenar   E042 mandos del titulo
+#   E043-E045 record (tres bytes BCD)   E049-E04B puntos (tres bytes BCD)
+#   E050 vidas   E051 escena   E052 liston de la proxima vida extra (BCD)
+#   E053 la fase esta en marcha
+#   E0B0-E12F copia de los atributos de sprite (32 fichas x 4), que 0x4EC9
+#        vuelca a la VRAM
+#   E140 episodio del enemigo grande (0..3)   E141 su fotograma
+#   E145-E14A las seis explosiones en curso
+#   E150-E16F las cuatro (o dos) piezas del enemigo grande, 8 bytes cada una
+#   E180-E186 el avion: 0xE181/82 son su fila y su columna (arranca en 0xA0/0x5C)
+#   E194 cuantos objetos hay vivos   E198 contador de aparicion
+#   E1B0 tipo del enemigo que toca   E1B7 la cuenta hasta el primer disparo
+#        del proximo enemigo (va al byte +3 de su hueco)
+#   E1B8/B9 POSICION EN LA FASE   E1BA desplazamiento fino (0,2,...,14)
+#   E1BB-E1BE los cuatro codigos de tira que se van a dibujar
+#   E1C4/E1C5 la caja de choque del objeto que se esta probando
+#   E1D1 indice del mapa (posicion/8)   E1D3 vueltas dadas a la fase (0..2)
+#   E1D6 cual de los dos enemigos grandes   E1D7 su fase   E1DC cuenta atras
+#   E200-E26F los SIETE huecos de objeto, 16 bytes cada uno: +0 tipo, +1 rutina,
+#        +2 estado, +3 dificultad, +4/5 velocidad de fila, +6/7 velocidad de
+#        columna, +8/9 fila, +10/11 columna, y de +12 en adelante los patrones
+#   E270-E2FF los NUEVE disparos enemigos, 16 bytes cada uno: +0 tipo (0 libre,
+#        1 normal, 2 salido de un objeto, 0xFF fijo), +1/+2 velocidad de fila,
+#        +3/+4 velocidad de columna, +5/+6 fila, +7/+8 columna, +9 patron y
+#        +10 color. El hueco de objeto n suelta su disparo en el hueco n
+#   E310 puntero al hueco de turno que se guardan las rutinas de objeto
+#   E312 punto de salida del disparo
+#   E314 hueco de disparo elegido   E316/E317 signos de fila y columna
+#   E318 tipo del hueco que dispara   E1C6-E1CC una cuenta de explosion por hueco
+#   E320 oleada en curso   E321-E32C las dos tandas de la oleada
+
+# --------------------------------------------------------------------------
+# LA CABECERA
+D 0x4000 0x4010 cabecera_cartucho  AB y el puntero INIT (0x4010); STATEMENT, DEVICE y TEXT a cero
+F 0x4000 2,w4
+
+B 0x4010 ARRANQUE. La BIOS entra aqui por la cabecera del cartucho.
+L 0x4010 INIT  Prepara la maquina y engancha la interrupcion
+C 0x4011 modo de interrupcion 1
+C 0x4013 escribe un jp en el gancho H.KEYI (0xFD9A/0xFD9B)...
+C 0x4018 ...que apunta a la rutina de interrupcion, 0x4043
+C 0x401e la pila arranca en 0xE400
+C 0x4021 borra de un ldir la RAM de trabajo, 0xE000-0xE3FF
+C 0x4033 apaga el piloto de CAPS (entra con A distinto de cero)
+C 0x4036 arranca el VDP y borra los 16 KB de VRAM
+C 0x403d acusa recibo de la interrupcion leyendo el registro de estado del VDP
+L 0x4041 BUCLE_MUERTO  Desde aqui el juego entero corre en la interrupcion
+
+B 0x4043 LA INTERRUPCION. Un paso del juego por fotograma.
+L 0x4043 INTERRUPCION  Gancho H.KEYI: un paso del juego por barrido
+C 0x4047 vuelca los tres canales de sonido al PSG
+C 0x404d 0xE006 es el candado: si ya estamos dentro, no se reentra
+C 0x4053 lee mandos y teclado
+C 0x4056 y despacha el estado
+C 0x4062 si el paso dejo el bit 7 puesto, repite el volcado de sonido
+
+L 0x4067 SUMA_A_HL  HL = HL + A, con acarreo a H
+C 0x4067 el acarreo solo puede subir uno, asi que basta con inc h
+L 0x406c SUMA_A_DE  DE = DE + A, con acarreo a D
+C 0x406c la gemela de 0x4067 para DE, que es el registro de los guiones
+B 0x4071 EL DESPACHADOR. El pop hl coge la direccion de retorno, o sea la tabla que va PEGADA al CALL; A la indexa y se salta por ella.
+L 0x4071 DESPACHA  Salta por la tabla que sigue al CALL, indexada por A
+C 0x4071 el pop coge la direccion de retorno: la tabla va PEGADA detras del call
+C 0x4072 dos bytes por entrada, asi que el indice se dobla
+C 0x4076 saca el puntero de la tabla...
+C 0x407a ...y salta a el sin gastar pila
+
+L 0x407b MUERTA_INTERCAMBIA  Intercambia B bytes entre (HL) y (DE). Nadie la llama
+C 0x407b intercambia B bytes entre (HL) y (DE) usando C de apoyo. Nadie la llama
+L 0x4085 MUERTA_CELDA  De HL saca la direccion de la tabla de nombres. Nadie la llama
+C 0x4085 de un punto en pixels saca su celda: entra la columna en H y la fila en L
+C 0x4086 los seis rra dejan en A los bits altos de la fila...
+C 0x408a ...y los tres rr h van metiendo la fila por arriba de H
+C 0x4092 H queda con fila*32 + columna/8 dentro del tercio, y pasa a L
+C 0x4093 los dos bits que quedan en A son el tercio (0..2)
+C 0x4095 0x3800 es la tabla de nombres: HL sale ya apuntando a la celda
+L 0x4099 MUERTA_POR_OCHO  HL = HL*8 recolocado en H:L. Nadie la llama
+C 0x4099 la vuelta de 0x4085: de la celda saca el punto en pixels. Nadie la llama
+C 0x409c HL*8 deja la fila en H y la columna en pixels en L...
+C 0x40a2 ...asi que se cruzan: H se queda la columna y L la fila por ocho
+
+B 0x40a5 LA MAQUINA DE ESTADOS. 0xE000 es el estado y 0xE001 el subestado.
+L 0x40a5 PASO_DE_ESTADO  Un paso de la maquina de estados
+C 0x40a5 0xE003 cuenta fotogramas sin parar
+C 0x40a8 0xE003 cuenta fotogramas; en 0xE005 queda su parte baja
+C 0x40aa los tres bits bajos, que es el ritmo que usan las animaciones
+C 0x40af bit 6 de 0xE002: hay partida en marcha
+C 0x40b4 sin partida en marcha el retorno comun es 0x44C4, el que lee el mando de la pantalla de titulo; con partida, 0x413A, que es un ret pelado
+C 0x40bc C es el estado y B el subestado
+C 0x40c1 el estado 3 es el unico que no lleva retorno comun: acaba en un jp
+C 0x40c5 empuja el retorno comun
+C 0x40c6 el call deja la tabla de 0x40C9 al alcance del pop de DESPACHA
+D 0x40C9 0x40D9 tabla_estados  Los ocho manejadores de estado, indexados por 0xE000
+F 0x40C9 w8
+
+B 0x40d9 ESTADO 0. Cortinilla de entrada de la pantalla de titulo.
+C 0x40d9 B trae el subestado y el djnz lo baja: el subestado 0 cae al ULTIMO bloque de la cadena, el 1 al primero
+C 0x40db un anillo cada dos fotogramas: el bit 0 del contador
+C 0x40e0 dibuja un anillo mas; con cero acaba la cortinilla
+C 0x40e4 ya cerrada, escribe VIDEO CARTRIDGE
+C 0x40ea cuenta atras a cero, o sea 256 fotogramas de letrero
+C 0x40ed subestado 2: el letrero ya esta puesto
+C 0x40ef cuando se acaba la espera se lleva el letrero
+C 0x40f4 el mismo guion, ahora escribiendo ceros: eso lo borra
+C 0x40fa y entran los graficos del titulo
+C 0x40ff subestado 3
+C 0x4101 pinta el rotulo SKY JAGUAR y el PUSH SPACE KEY
+C 0x4104 sin espera: al estado 1
+C 0x4108 subestado 0, el primero que corre: deja la pantalla lista
+C 0x410b los ocho registros del VDP
+C 0x410e y el color entero de los caracteres lisos 0x00-0x0F
+C 0x4111 arma la cortinilla de anillos
+B 0x4116 ESTADO 1. Espera.
+C 0x4116 el estado 1 solo hace tiempo
+C 0x411b agotada la cuenta, al estado 2
+B 0x411d ESTADO 2. LA DEMOSTRACION: la misma fase, jugada por el guion de mandos falsos de 0x4B5F.
+C 0x411d subestado 1 en adelante: la demostracion ya rueda
+C 0x411f un paso de la fase
+C 0x4122 0xE053 a cero es que la fase se ha terminado
+C 0x4127 estado 0: la cortinilla de la pantalla de titulo otra vez
+C 0x412b subestado 0: monta la escena de la demostracion
+C 0x4131 24 fotogramas para que se vea la pantalla montada
+C 0x4136 el subestado siempre sube de uno en uno
+B 0x413b ESTADO 3. Arranca la partida de verdad.
+C 0x413b 0x93 es la musica de arranque; mientras suena, FOTOGRAMA no deja correr la fase
+C 0x4140 vidas, escena, puntos y demas a los valores de arranque
+C 0x4146 el camino de vuelta al titulo cuando se acaba la partida
+B 0x414f ESTADO 4. Prepara una vida: quita una y coloca el avion.
+C 0x414f subestado 1: el panel ya esta repintado
+C 0x4156 coloca el avion en su sitio de salida
+C 0x4159 0xE053 a uno: la fase esta en marcha
+C 0x415e 24 fotogramas es la espera de todos los cambios de estado
+C 0x4163 0xE000 es el estado...
+C 0x4167 ...y el subestado vuelve a cero al cambiar de estado
+C 0x416c subestado 0: se acaba de perder una vida
+C 0x416f una vida menos
+C 0x4176 un solo fotograma de espera
+B 0x417b ESTADO 5. LA PARTIDA. Es el estado 2 sin subestados, con los mandos de verdad.
+C 0x417b los estados 2 y 5 pisan la misma fase; lo que cambia es de donde salen los mandos
+C 0x4183 0xE1DD a cero al acabar
+C 0x4188 pondria el estado 7, pero ni la tabla ni ningun salto entran aqui
+B 0x418f ESTADO 6. GAME OVER: si quedan vidas vuelve al 4, si no al titulo.
+C 0x418f sin vidas se acabo la partida
+C 0x4195 con vidas, al estado 4, que es el que arranca una vida nueva
+C 0x419a otros 24 fotogramas
+C 0x41a1 deja solo las ocho primeras fichas de sprite
+C 0x41a4 vuelca el silencio al PSG en el acto
+C 0x41a7 el guion del GAME OVER
+C 0x41ad el 6 ya estaba puesto: aqui solo se llega desde el propio estado 6
+C 0x41b2 0x99 es la musica de fin de partida
+B 0x41bb ESTADO 7. Espera al disparo para volver a empezar.
+L 0x4133 FIJA_ESPERA  Deja A en la cuenta atras 0xE004
+L 0x4136 SUBE_SUBESTADO  Suma uno a 0xE001
+L 0x415e ESPERA_24  Espera 24 y pasa al estado siguiente
+L 0x4167 SUBESTADO_CERO  Devuelve el subestado a cero
+L 0x4188 MUERTA_ESTADO7  Pondria el estado 7. Ningun salto entra aqui
+C 0x41bb DE apunta a los bits de partida para lo que venga
+C 0x41be bit 4 de los mandos recien pulsados: el disparo
+C 0x41c5 baja el bit 6: ya no hay partida en marcha
+C 0x41c9 vuelve a la pantalla de titulo
+C 0x41cc tira el retorno comun que empujo el despachador
+C 0x41cd estado 0 y subestado 1: la cortinilla ya no se rehace
+C 0x41d3 0x9D es el silencio: su guion es un 0xFF pelado en los tres canales
+C 0x41d8 el canal A sigue en 0x99 mientras suena el GAME OVER
+C 0x41de acabada la musica, cierra la partida el solo
+L 0x41e5 PREPARA_PARTIDA  Borra 0xE049-0xE33F y carga los valores iniciales
+C 0x41e5 borra de 0xE049 a 0xE33F: puntos, avion, objetos y fase
+C 0x41f2 y encima copia los cuatro valores de arranque
+C 0x41fd los caracteres del paisaje, que el titulo habia pisado
+D 0x4200 0x4204 valores_iniciales_partida  Los cuatro bytes que van a 0xE050: tres vidas, escena 1, el liston de la vida extra a cero (la primera cae a los 10000 puntos) y 0xE053 a 2
+F 0x4200 4
+
+L 0x4204 ARRANCA_ESCENA  Monta la pantalla de la demostracion y elige por donde empieza
+C 0x4204 el panel del lado derecho
+C 0x4207 los patrones y colores del paisaje
+C 0x420b ningun episodio del enemigo grande empezado
+C 0x420e el guion del demo, otra vez desde el principio
+C 0x4212 0xE053 a uno: fase en marcha
+C 0x4215 0xE040 cuenta las demostraciones: dice por que fila de la fase arranca la siguiente
+C 0x421f el contador da la vuelta despues del 6, y ademas se salta el 2: las demostraciones arrancan en las filas 0, 256, 768, 1024, 1280 y 1536
+C 0x4225 la cuenta por 256 es la fila de la fase por la que entra la demostracion
+C 0x422b y a colocar el avion
+L 0x422e APAGA_SPRITES  Manda las 32 fichas de sprite fuera de la pantalla
+C 0x422e las 32 fichas de sprite son 128 bytes de atributos
+C 0x4234 rellena las cuatro casillas de cada ficha con 0xE3; en la fila, ese valor la deja fuera de la pantalla
+C 0x4239 si sonaba la marcha de partida (0x93) la deja...
+C 0x423e ...y si no, lo silencia todo con la 0x9D
+L 0x4244 APAGA_SPRITES_9  Igual, pero solo de la novena ficha en adelante
+C 0x4244 de la ficha 9 en adelante: las nueve primeras (avion, balas y gigante) se quedan
+L 0x424c SUMA_PUNTOS  Suma DE (en BCD) a los puntos y reparte las vidas extra
+C 0x424c sin partida en marcha (bit 7 de 0xE002 tras el add) no puntua
+C 0x4251 los puntos son tres bytes BCD, del bajo al alto
+C 0x4256 el daa detras de cada suma es lo que los mantiene en BCD
+C 0x4262 y el tercer byte lleva el acarreo
+C 0x4269 pasado el 999999 el record se clava ahi: 0xE043 a 0xE045 a 99 99 99
+C 0x4276 el liston de 0xE052 se compara con el byte alto de los puntos: la primera vida extra cae a los 10000
+C 0x427e y el liston sube 4, o sea 40000 puntos hasta la siguiente
+C 0x4283 pasado el 999999 el liston se clava en 0xFF y ya no da mas vidas
+C 0x4285 el liston nuevo
+C 0x428b una vida mas
+C 0x428f 0x0B es el aviso de vida extra
+C 0x4296 y si la puntuacion pasa al record, lo actualiza
+C 0x429f ...y si empatan, por los dos de abajo
+C 0x42a6 los puntos pasan a ser el record
+L 0x42b0 PINTA_PANEL  Rotulos del panel, vidas, escena, puntos y record
+C 0x42b0 el guion de los rotulos del panel
+C 0x42bc el rotulo (c)KONAMI, siete celdas en 0x3AD8
+C 0x42c8 y 1984, cinco celdas mas en 0x3AFA
+C 0x42d0 el record va en 0x38B9, fila 2 del panel
+C 0x42d9 los puntos en 0x3859, fila 1
+L 0x42df PINTA_TRES  Escribe tres bytes BCD (seis cifras) en la tabla de nombres
+C 0x42df tres bytes BCD son seis cifras
+L 0x42e3 PINTA_ESCENA  Escribe el numero de escena
+C 0x42e3 la escena es un solo byte BCD en 0x3A3C
+C 0x42e6 estas dos instrucciones no hacen nada: PINTA_DOS_CIFRAS pisa A en el acto con el byte BCD
+C 0x42f0 la cifra de arriba es el nibble alto
+C 0x42f5 la fuente arranca en 0x10, asi que la cifra se suma a 0x10
+C 0x42fd y detras la cifra de abajo
+C 0x4305 los bytes BCD van del alto al bajo, por eso dec de
+L 0x430a PINTA_VIDAS  Dibuja hasta seis avioncitos de vidas
+C 0x430a hasta seis avioncitos, aunque haya mas vidas
+C 0x4310 cuenta los avioncitos de 0 a 5
+C 0x4313 el primero va en la celda 0x3939
+C 0x4316 del cuarto en adelante bajan a otra fila
+C 0x431a 0x3979 es la fila de abajo
+C 0x431e dos celdas de ancho por avioncito
+C 0x4324 mientras queden vidas, E a 0xFF...
+C 0x4329 ...y agotadas, E a cero, que borra en vez de pintar
+C 0x432a 0xA4 es la esquina de arriba a la izquierda del avioncito
+L 0x4332 PINTA_AVION  Un avioncito de 2x2 celdas, o lo borra si E vale cero
+C 0x4332 arriba a la izquierda y arriba a la derecha
+C 0x4338 el patron va en A y no debe perderse en la cuenta de la fila
+C 0x4339 0x1E lleva de la esquina derecha de arriba a la izquierda de abajo
+C 0x433e y las dos celdas de abajo, que son 0xA6 y 0xA7
+C 0x4341 con E a cero sale un cero: eso borra la celda
+C 0x4345 los cuatro patrones van seguidos
+C 0x4348 la pantalla de titulo entera
+L 0x434d CARGA_TITULO  Borra la pantalla y carga los graficos del titulo
+C 0x434d 0xE0 apaga la pantalla mientras se cargan los graficos
+C 0x4355 los patrones del rotulo van a 0x2600, encima de los del paisaje
+C 0x435e 224 bytes de color 0xF0 desde 0x0600: 28 caracteres en blanco sobre negro
+C 0x4369 y 96 bytes mas, doce caracteres, del color 0x80
+L 0x4374 PINTA_ROTULO  El rotulo del titulo y el letrero PUSH SPACE KEY
+C 0x4374 el guion de celdas del rotulo
+C 0x437a y el letrero PUSH SPACE KEY
+L 0x4381 BORRA_NOMBRES  Borra la tabla de nombres y apaga los sprites
+C 0x4381 las 768 celdas de la tabla de nombres a cero
+C 0x438b y ninguna ficha de sprite a la vista
+L 0x438e A_VRAM  LDIRVM con los argumentos al reves: DE origen, HL destino
+C 0x438e LDIRVM quiere el destino en HL y el origen en DE, justo al reves
+L 0x4392 MUERTA_A_VRAM  La variante con C a cero de 0x438E. Nadie la llama
+C 0x4392 la misma con C a cero, o sea nada que copiar. Nadie la llama
+
+B 0x4396 EL DESCOMPRESOR A LA VRAM. El formato esta en la cabecera del fichero.
+L 0x4396 DESC_VRAM  Descomprime a la VRAM leyendo la direccion del propio guion
+C 0x4396 los dos primeros bytes del guion son la direccion de VRAM
+L 0x439c DESC_VRAM_HL  Igual, pero con la direccion de VRAM ya puesta en HL
+C 0x439c prepara la escritura y se guarda el puerto de datos
+C 0x43a0 C prima trae el puerto; C lo usa el out (c),a
+C 0x43a3 el byte de mando
+C 0x43a6 0x00 acaba el guion
+C 0x43a8 quitado el bit 7, si no cambia era una repeticion
+C 0x43ad 0x80 pelado empieza otro bloque, con su direccion detras
+C 0x43b1 los bytes van al puerto uno detras de otro
+C 0x43b9 el byte que hay que repetir
+C 0x43bb el nop es el respiro que el VDP necesita entre escritura y escritura
+L 0x43c2 PREPARA_ESCRITURA  SETWRT y deja el puerto de datos del VDP en C prima
+C 0x43c2 el registro alterno guarda A mientras la BIOS trabaja
+C 0x43c7 0x0006 es la variable de sistema con el puerto de datos del VDP
+L 0x43ce MUERTA_PREPARA_LECTURA  La gemela para LEER de la VRAM. Nadie la llama
+C 0x43ce la gemela para LEER de la VRAM. Nadie la llama, este cartucho nunca lee la VRAM
+L 0x43d8 PINTA_GUION  Vuelca un guion de celdas en la tabla de nombres
+C 0x43d8 C a 0xFF deja pasar los bytes tal cual
+C 0x43da la direccion de VRAM, delante de cada bloque
+C 0x43e3 un byte por celda
+C 0x43e6 0xFF acaba el guion
+C 0x43e8 0xFE empieza otro bloque
+C 0x43eb aqui esta el truco: con C a cero sale un cero y la celda se borra
+C 0x43f0 el inc hl no hace falta, la VRAM va sola
+L 0x43f3 BORRA_GUION  El mismo guion, pero escribiendo ceros
+C 0x43f3 la misma entrada, pero borrando
+L 0x43f7 RELLENA_TRES  FILVRM repetido en los tres tercios
+C 0x43f7 los tres tercios de la pantalla llevan lo mismo
+C 0x43fe 0x800 es lo que mide un tercio de pantalla
+C 0x4404 tres tercios y fuera
+L 0x4408 DESC_TRES  Descomprime lo mismo en los tres tercios
+C 0x4408 la version del descompresor para los tres tercios
+C 0x440c descomprime en el tercio que toca...
+C 0x440f ...y el siguiente va 0x800 mas alla
+L 0x4418 ARRANCA_VDP  Registros del VDP y borrado de los 16 KB de VRAM
+C 0x4418 0xB8 va al registro 7 del PSG: los tres tonos abiertos y el ruido cerrado
+C 0x441d y silencia los tres canales con la 0x9D
+C 0x4422 los 16 KB de VRAM a cero, de una sentada
+L 0x442c CARGA_REGISTROS  Manda los ocho registros del VDP
+C 0x442c los ocho registros salen de la tabla de 0x443D
+C 0x4431 se escriben del 0 al 7, por orden
+C 0x4433 B es el valor y C el numero de registro, que es lo que quiere WRTVDP
+D 0x443D 0x4445 tabla_registros_vdp  Los ocho registros del VDP: SCREEN 2 y sprites de 16x16
+F 0x443D 8
+
+L 0x4445 REGISTRO_7  Escribe B en el registro 7 (color del borde)
+C 0x4445 el registro 7 lleva el color del borde y del fondo
+L 0x444a LEE_MANDO  Lee el mando 1 por el PSG, registros 15 y 14
+C 0x444a bit 6 de 0x8F a cero: mando del puerto 1
+C 0x444c el registro 15 del PSG elige el puerto...
+C 0x4451 ...y el 14 devuelve lo que hay en el
+C 0x4458 el PSG da los bits al reves y sobran los dos de arriba
+L 0x445c LEE_MANDOS  Junta mando y teclado en 0xE00A, y deja en 0xE009 los recien pulsados
+C 0x445c mando y teclado se suman: vale cualquiera de los dos
+C 0x4468 sin partida en marcha (bit 6 de 0xE002) manda el guion del demo
+C 0x446d 0xE00A guarda lo que hay pulsado ahora...
+C 0x4472 ...y 0xE009 solo lo que se acaba de pulsar: lo nuevo y no lo de antes
+L 0x4479 LEE_TECLADO  Cursores y espacio de las filas 7 y 8, recolocados como el mando
+C 0x4479 la fila 7 del teclado; de ella solo interesa un bit
+C 0x447e el teclado tambien viene al reves
+C 0x447f el bit 6 de la fila 7 (SELECT) cae en el sitio del segundo disparo
+C 0x4483 la fila 8: espacio, cursores y las teclas de edicion
+C 0x4489 dos rotaciones dejan el cursor izquierdo en su bit
+C 0x448c el bit 2 es izquierda
+C 0x4491 dos mas: el cursor derecho al bit 3 y el espacio al bit 4
+C 0x4494 bit 3 derecha y bit 4 disparo
+C 0x4499 y una ultima: arriba al bit 0 y abajo al bit 1
+C 0x449a asi queda el byte con la misma forma que el del mando
+L 0x449e MANDO_DEL_DEMO  Sin partida en marcha, los mandos salen del guion del demo
+C 0x449e 0xE00C es el paso del guion del demo
+C 0x44a1 el guion avanza un paso cada 32 fotogramas
+C 0x44aa el guion de mandos falsos empieza en 0x4B5F
+C 0x44b2 y cada ocho fotogramas se anade el disparo
+C 0x44b9 bit 4: disparo
+C 0x44bb 0xFF marca el final del guion...
+C 0x44bf ...y lo devuelve al principio
+L 0x44c4 RETORNO_TITULO  Retorno comun de los estados 0 a 2: mira si se empieza a jugar
+C 0x44c4 el mismo 0x8F que pone LEE_MANDO: entrar por 0x444C no ahorra nada
+C 0x44c6 lee el mando...
+C 0x44ca ...y el teclado, y los junta
+C 0x44ce 0xE042 lleva los mandos del titulo, aparte de los de la partida
+C 0x44d5 cualquiera de los cinco bits sirve; sin nada nuevo, nada que hacer
+C 0x44d8 con la partida ya empezada (subestado distinto de cero) va a 0x44EC
+C 0x44dc en los estados 0 y 2 cualquier tecla adelanta al rotulo del titulo
+C 0x44de en el estado 1 hace falta el disparo
+C 0x44e1 con el disparo: marca partida en marcha y salta al estado 3
+C 0x44e6 estado 3, que es el que la arranca
+C 0x44ec sin cuenta atras...
+C 0x44f0 ...estado 1, o sea directo a la espera del rotulo
+
+L 0x44f5 ARRANCA_CORTINILLA  Prepara la cortinilla de la pantalla de titulo
+C 0x44f5 diecisiete anillos de cortinilla
+C 0x44fa el primero arranca en la celda 0x3AAA, abajo del todo
+C 0x4500 0xE4 pinta el borde mientras dura la cortinilla
+L 0x4505 PASO_CORTINILLA  Un anillo de la cortinilla, de fuera adentro
+C 0x4505 cada paso sube una fila entera
+C 0x450f el adorno arranca en el caracter 0x40 y va subiendo
+C 0x4511 tres celdas en la primera fila...
+C 0x4516 ...once en la segunda...
+C 0x451c ...y doce en la tercera
+C 0x4520 y borra las doce de la cuarta, que es la que va quedando atras
+C 0x4524 un anillo menos
+C 0x4529 se guarda el arranque de la fila para poder bajar a la siguiente
+C 0x452a cada celda lleva el caracter siguiente: el adorno no se repite
+C 0x4532 0x20 es una fila de la tabla de nombres
+L 0x4537 PASO_DE_FASE  Un fotograma de la fase en marcha
+C 0x4537 0xE1DC es la espera de entrada: mientras corre, la fase esta quieta
+B 0x4540 EL FOTOGRAMA DE LA PARTIDA. Todo lo que pasa en un barrido.
+C 0x4540 mientras suena la musica de arranque (0x93) no hay fotograma
+C 0x4546 los sprites a la VRAM
+C 0x4549 el fondo
+C 0x454c el avion
+C 0x454f el enemigo que toca
+C 0x4552 los siete objetos
+C 0x4558 0xE1B0 a 7 pide el reparto de enemigos cada 60 fotogramas
+C 0x457b el episodio del gigante, en los dos bits de abajo
+C 0x4582 con 2 el gigante esta en pantalla y ademas siguen saliendo enemigos
+C 0x458d solo el episodio 2 anima y pinta el cuerpo del bicho
+C 0x459a los sprites del gigante son las piezas a las que se dispara
+C 0x45a0 los caracteres del gigante se cargan a plazos, un trozo por fotograma
+L 0x45a6 ARRANCA_VIDA  Coloca el avion y los contadores para una vida nueva
+C 0x45a6 0xE0 apaga la pantalla mientras se rehace
+C 0x45ab quita las fichas de sprite de en medio
+C 0x45ae los siete huecos de objeto y todo 0xE200-0xE33F a cero
+C 0x45bb el avion vuelve a su fila y su columna de salida
+C 0x45c6 la posicion en la fase retrocede al multiplo de 64 filas de mas abajo
+C 0x45cd 0xE1BA a cero: sin desplazamiento fino
+C 0x45d2 contadores de oleada, objetos vivos y cuenta de muerte, todos a cero
+C 0x45ea reparte la oleada que toca a esta altura de la fase
+C 0x45f0 si el gigante estaba en marcha hay que decidir si sigue
+C 0x45f7 con el episodio 1 (aun no ha llegado) se cancela...
+C 0x45f8 ...y con el 2 o el 3 se queda, con el fotograma en 8
+C 0x45fe deja el fotograma del gigante...
+C 0x45ff ...y su episodio
+C 0x4601 y lo vuelve a colocar en sus sprites
+C 0x4607 las seis explosiones a cero
+C 0x4614 0x60 fotogramas de espera antes de que la fase eche a andar
+C 0x4619 los 48 patrones de sprite
+C 0x461c el avion a sus dos fichas...
+C 0x461f ...y las fichas a la VRAM
+C 0x4622 y el fondo entero de una vez
+D 0x4625 0x462C estado_inicial_avion  Los siete bytes que van a 0xE180: fila 0xA0, columna 0x5C y los patrones
+F 0x4625 7
+
+L 0x462c PASO_DE_MUERTE  La cuenta atras de la explosion del avion
+C 0x462c 0xE1D0 es la cuenta atras de la explosion del avion
+C 0x4630 la explosion cambia de patron dos veces por el camino
+C 0x4633 0x94 al principio...
+C 0x4637 ...0x9C por debajo de 0x60...
+C 0x463d ...y 0xF8 por debajo de 0x40, que es el avion cayendo
+C 0x463f la ficha 0 del avion lleva el patron y el color 6
+C 0x4644 color 6, rojo oscuro
+C 0x4647 y la ficha 1 va cuatro patrones mas alla
+C 0x464e color 15, blanco, encima del rojo
+C 0x4651 se queda en 1: la cuenta no baja de ahi
+C 0x4653 0xE145-0xE14A son las seis explosiones
+C 0x4659 con que quede una sola, la fase sigue
+C 0x465f agotadas todas, 0xE053 a cero acaba la fase
+L 0x4663 MUEVE_AVION  Lee los mandos y mueve el avion dentro de los topes
+C 0x4663 0xE1CF distinto de cero: el avion esta muerto
+C 0x466a los mandos que usa el avion
+C 0x466d L es la fila y H la columna
+C 0x4670 se guarda la posicion de antes por si el tope la rechaza
+C 0x4672 B es lo que cambia la columna y C la fila
+C 0x4675 bit 0: sube una fila
+C 0x4679 bit 1: baja una fila
+C 0x467d bit 2: una columna a la izquierda
+C 0x4681 bit 3: una a la derecha
+C 0x4685 la columna se mueve entre 0x0A y 0xAD
+C 0x468e fuera de ahi se queda como estaba
+C 0x468f y la fila entre 0x40 y 0xAF: el avion no puede subir mas alla de un tercio
+C 0x4698 igual, se queda como estaba
+C 0x4699 posicion nueva
+L 0x469c AVION_A_SPRITES  Copia el avion a sus DOS fichas de sprite, 0xE0B0 a 0xE0B7
+C 0x469c las dos fichas del avion son 0xE0B0 a 0xE0B7
+C 0x46a3 fila, columna, patron 0 y color 4 de la primera
+C 0x46a9 la segunda repite fila y columna...
+C 0x46af ...y se queda el patron 4 y el color 15, encima de la otra
+L 0x46b4 DISPARA  Con el disparo, busca hueco libre y lanza una bala
+C 0x46b4 muerto no se dispara
+C 0x46b9 el disparo tiene que ser NUEVO: no vale dejarlo apretado
+C 0x46bf dos balas a la vez de normal...
+C 0x46c1 ...y tres cuando 0xE1D5 llega a 2
+C 0x46c9 las balas son las fichas de sprite 2, 3 y 4 (0xE0B8 en adelante)
+C 0x46cc la fila 0xE0 es la marca de bala apagada
+C 0x46d1 cuatro bytes por ficha
+C 0x46d8 la bala nace donde esta el avion
+C 0x46e0 el patron de la bala cambia con 0xE1D5: 8 de normal...
+C 0x46e8 ...y 0x0C con el disparo mejorado
+C 0x46ec color 15, blanco
+C 0x46ee 0x0C es el ruido del disparo
+L 0x46f3 MUEVE_BALAS  Sube las balas seis pixeles y las apaga al salir de la pantalla
+C 0x46f3 las tres balas
+C 0x46f8 la bala apagada no se mueve
+C 0x46fd seis pixeles por fotograma hacia arriba
+C 0x46ff al pasarse por arriba se apaga
+C 0x4704 cuatro bytes hasta la ficha siguiente
+L 0x470b PASO_APARICION  Cuenta atras entre enemigos
+C 0x470b HL entra en 0xE196: retrocede a 0xE193, la cuenta entre enemigo y enemigo
+C 0x4710 el tipo de la tanda estaba guardado en 0xE1DB
+C 0x4716 ocho fotogramas hasta el siguiente
+C 0x471a 0xE192 lleva el orden dentro de la tanda y pasa a 0xE198
+C 0x471f un enemigo menos de la tanda
+C 0x4722 agotada la tanda, 0xE195 y 0xE196 a cero
+C 0x4728 0xE1B1 recarga la cuenta de 0xE197
+L 0x4730 PIDE_ENEMIGO  Encarga el enemigo cuyo tipo llega en A
+C 0x4730 se guarda el tipo para los enemigos que quedan de la tanda
+C 0x4733 0xE194 son los objetos vivos: con alguno en pantalla no se encarga la tanda
+C 0x473b 0xE1DA a cero
+C 0x473f ocho fotogramas hasta el primero
+C 0x4742 0xE192 arranca la cuenta dentro de la tanda
+C 0x4744 cinco enemigos por tanda
+C 0x4745 0xE195 y 0xE196 marcan la tanda en marcha
+L 0x474e ENEMIGO_PERIODICO  Suelta enemigos cada cierto numero de fotogramas
+C 0x474e cada 0x80 fotogramas cae un enemigo de tipo 5 pase lo que pase
+C 0x4759 el resto del tiempo solo con el gigante en su fase 2
+C 0x475f 0xE144 es la cuenta atras de los enemigos del gigante
+C 0x4764 y se recarga con 0xE1B1
+C 0x476c tipo 4 mientras el gigante esta delante
+L 0x4773 TOCA_ENEMIGO  Decide si toca soltar un enemigo, y cual
+C 0x4773 con el gigante en marcha no salen enemigos por la via normal
+C 0x4778 0xE196 distinto de cero: hay una tanda a medias
+C 0x477f la oleada decide si toca soltar algo
+C 0x4783 los tipos 16 y mas alla no existen
+C 0x4789 del 13 al 15 salen en tanda de cinco
+C 0x478e y los demas de uno en uno
+L 0x4792 CREA_ENEMIGO  Monta el hueco de objeto del enemigo 0xE1B0
+C 0x4792 0xE198 es el contador de aparicion
+C 0x4795 dos rutinas por tipo, asi que el indice va doblado
+C 0x4799 el tipo 0 no existe
+C 0x479a el bit 0 del contador elige una de las dos: el mismo tipo alterna
+C 0x479f la base es 0x48C8, o sea los dos bytes del jr de aqui arriba
+C 0x47a6 0xE199 se queda la rutina de objeto
+C 0x47ab byte +1 del hueco: la rutina que lo maneja
+C 0x47ad 0x48E8 da el fotograma de partida de esa rutina
+C 0x47b5 los huecos se recorren hacia atras, de 16 en 16
+C 0x47bb en la oleada 0x0A solo se pueden usar cuatro de los siete huecos
+C 0x47c6 hueco libre es el que tiene el tipo a cero
+C 0x47ce 0xE310 se queda el hueco elegido
+C 0x47d4 byte +0: el tipo
+C 0x47d6 byte +1: la rutina
+C 0x47d8 byte +2: el estado, que arranca en 3
+C 0x47de el tipo 9 usa el byte +2 para otra cosa
+C 0x47e3 cuatro variantes que rotan con el contador de aparicion
+C 0x47f1 el tipo 5 es el unico que deja premio al morir
+C 0x47f6 0xE1D4 cuenta los enemigos de tipo 5 que han salido
+C 0x47ff el numero 24 de cada 32 sueltara el premio de 1000 puntos
+C 0x4804 los numeros 6 y 22 de cada 32 sueltan la mejora del disparo...
+C 0x480c ...salvo que la mejora ya este al tope (0xE1D5 en 2), y entonces no sueltan nada
+C 0x4816 byte +2: el premio
+C 0x4818 byte +3: la cuenta atras hasta su primer disparo
+C 0x481d la velocidad de caida sale de 0x48FB, indexada por la rutina
+C 0x482b por cuatro: el byte de la tabla es la parte alta de un valor de 16 bits
+C 0x482e bytes +4 y +5: la velocidad de fila
+C 0x4834 y la lateral sale de 0x490D, dos bytes por rutina
+C 0x483f el tipo 8 desvia su velocidad lateral...
+C 0x4843 ...con uno de los ocho valores de 0x4979
+C 0x4853 el desvio se suma a la velocidad de la tabla
+C 0x4856 bytes +6 y +7: la velocidad de columna
+C 0x485b el tipo 5 entra siempre por arriba
+C 0x4862 con el gigante delante, los demas entran por donde el diga
+C 0x4869 el tipo 12 entra por la fila 0xE0...
+C 0x4872 ...y los demas por la 0xF0, o sea por debajo del borde
+C 0x4874 byte +9: la parte entera de la fila
+C 0x4877 la columna de entrada sale de 0x4931
+C 0x487b los tres bits bajos del contador reparten a los cinco de la tanda
+C 0x4888 byte +11: la parte entera de la columna
+C 0x488a los tipos 13 en adelante comparten plantilla con los del 1 al 3
+C 0x4896 cuatro bytes por tipo
+C 0x489c bytes +12 a +15: dos parejas de patron y color
+C 0x48a1 un objeto vivo mas
+C 0x48a5 las rutinas 0 a 4 hacen ruido al aparecer, menos la 2
+C 0x48ae 0x02 es el zumbido del enemigo que entra
+C 0x48b3 con el gigante delante...
+C 0x48b9 ...la rutina se cambia por su pareja: 0 por 3 y 1 por 2
+C 0x48c2 con el gigante en pantalla los enemigos entran por la fila 0x1C...
+C 0x48c6 ...y por la columna 0x5C, o sea desde el propio bicho
+C 0x48c8 estos dos bytes son a la vez el jr y la base de la tabla de 0x48CA
+D 0x48CA 0x48E8 tabla_rutina_por_tipo  De que rutina de objeto (0 a 0x12, la de la tabla 0x535F) es cada tipo de enemigo. Base 0x48C8, dos bytes antes de los datos; el indice es 2*tipo mas el bit 0 del contador de aparicion, o sea que un mismo tipo alterna entre dos rutinas
+F 0x48CA 15
+D 0x48E8 0x48FB tabla_base_columna  Base del indice de columna de entrada (va a 0xE19A) de cada rutina de objeto; 0x4877 le suma los tres bits bajos del contador de aparicion para indexar 0x4931
+F 0x48E8 19
+D 0x48FB 0x490D tabla_velocidad_fila  Velocidad con la que baja cada rutina de objeto; el byte se multiplica por CUATRO y va a los bytes 4 y 5 del hueco
+F 0x48FB 18
+D 0x490D 0x4931 tabla_velocidad_columna  Velocidad lateral de 16 bits de cada rutina de objeto; va a los bytes 6 y 7 del hueco
+F 0x490D w2
+D 0x4931 0x4945 tabla_columna_de_entrada  Columna por la que entra el enemigo (va al byte +11 del hueco), indexada por 0xE19A mas los tres bits bajos del contador de aparicion
+F 0x4931 20
+D 0x4945 0x4975 plantillas_enemigo  Los cuatro bytes de cola del hueco, por tipo (indice 4*tipo)
+F 0x4945 4
+D 0x4975 0x4979 tabla_variante_tipo9  Los cuatro patrones que alterna el enemigo de tipo 9
+F 0x4975 4
+D 0x4979 0x4989 tabla_desvio_tipo8  Ocho desvios de 16 bits que el enemigo de tipo 8 suma a su velocidad lateral, segun los tres bits bajos del contador de aparicion
+F 0x4979 w2
+
+L 0x4989 MARCA_MUERTO  Libera el disparo fijo que este hueco tenia colgado en 0xE290
+C 0x4989 del hueco saca SU hueco de disparo: 0xE290 mas 16 por hueco, o sea el disparo n+2
+C 0x4990 solo lo libera si era uno de los fijos (0xFF)
+C 0x4997 apaga el hueco y a por el siguiente
+L 0x499c PASO_OBJETOS  Recorre los siete huecos y mueve cada objeto
+C 0x499c los siete huecos, de 0xE200 en adelante
+C 0x49a2 hueco vacio, nada que mover
+C 0x49a4 0xE310 apunta al hueco para las rutinas que vienen detras
+C 0x49ab la rutina 0x13 se mueve sola: aqui no se le toca
+C 0x49af HL a los bytes +4/+5 (velocidad) y DE a los +8/+9 (fila)
+C 0x49b9 la fila es de 16 bits: primero la parte de abajo...
+C 0x49be ...y luego la de arriba, con el acarreo
+C 0x49bf de 0xC0 a 0xCF el objeto se ha ido por debajo: fuera
+C 0x49c3 de 0xD0 en adelante es que aun esta entrando por abajo
+C 0x49c7 byte +9 nuevo
+C 0x49cb y lo mismo con la columna, bytes +10 y +11
+C 0x49d1 pasada la columna 0xB0 se ha salido por un lado
+C 0x49d9 16 bytes por hueco
+C 0x49e3 los objetos usan las fichas de sprite de la 9 en adelante (0xE0D4)
+C 0x49f2 hueco vacio, ficha sin tocar
+C 0x49f7 el tipo 6 mide el doble de ancho
+C 0x49fe la rutina 0x13 lleva dos piezas sueltas
+C 0x4a03 y la 0x10 arrastra un rastro
+C 0x4a08 de +1 a +9: la fila
+C 0x4a0e la fila hace falta otra vez para la segunda ficha
+C 0x4a12 +11 es la columna
+C 0x4a18 +12 y +13: patron y color de la primera ficha
+C 0x4a1f la segunda ficha va en la misma fila...
+C 0x4a23 ...y en la misma columna: dos sprites superpuestos para tener dos colores
+C 0x4a27 +14 y +15: patron y color de la segunda
+C 0x4a34 16 bytes al hueco siguiente...
+C 0x4a38 ...y ocho bytes (dos fichas) a la ficha siguiente
+C 0x4a41 sin primera pieza, deja sus dos fichas a cero y salta
+C 0x4a4b +2 a cero: la primera pieza ya no esta
+C 0x4a52 fila de la primera pieza
+C 0x4a53 de +3 a +7: la columna de la primera pieza
+C 0x4a58 columna a la ficha
+C 0x4a5c +8: el patron
+C 0x4a60 +9: el color
+C 0x4a62 y de +9 a +11, donde empieza la segunda pieza
+C 0x4a65 +12 a cero: la segunda pieza tampoco esta
+C 0x4a6b +12: la fila de la segunda pieza
+C 0x4a6f +13: su columna
+C 0x4a73 +14: su patron
+C 0x4a77 +15: su color
+C 0x4a7c +2 es el estado, y decide si ademas deja rastro
+C 0x4a7f de +2 a +9: la fila
+C 0x4a83 C se queda la fila y B la columna
+C 0x4a95 la segunda ficha va en la misma fila...
+C 0x4a98 ...y 0x40 pixeles a la derecha: el objeto mide cuatro sprites de ancho
+C 0x4aa3 solo con el estado en 3 cuelga el disparo fijo
+C 0x4aaa el rastro no es un adorno: es un DISPARO ENEMIGO mas, montado a mano
+C 0x4ab4 tipo 0xFF: un disparo que no se mueve solo, esta rutina lo recoloca cada fotograma
+C 0x4ab6 byte +6 del disparo: la fila
+C 0x4abd los cuatro bits bajos del contador de fotogramas, por ocho: 0 a 0x78
+C 0x4ac5 pasado 0x40 la cuenta vuelve hacia atras
+C 0x4acd asi la columna del disparo va y viene 0x40 pixeles alrededor del objeto
+C 0x4ad0 patron 0x88 y color 15, los del disparo enemigo
+C 0x4ad8 de +1 a +9: la fila
+C 0x4add C se queda la fila y B la columna
+C 0x4ae7 +12 y +13: patron y color de la primera ficha
+C 0x4af0 la segunda ficha comparte fila...
+C 0x4af2 ...y va 16 pixeles a la derecha: el tipo 6 mide dos sprites de ancho
+C 0x4af7 +14 y +15: patron y color de la segunda
+L 0x4b71 COLOR_LISOS  Da a los caracteres 0x00-0x0F un color entero cada uno
+C 0x4b71 el tercio de arriba...
+C 0x4b77 ...el de en medio...
+C 0x4b7d ...y el de abajo, que llevan lo mismo
+C 0x4b83 y ya puestos, la fuente del panel
+C 0x4b86 el color arranca en 0x00, negro sobre negro
+C 0x4b87 los dieciseis caracteres lisos, del 0x00 al 0x0F
+C 0x4b89 ocho bytes de color por caracter, uno por fila
+C 0x4b91 0x11 sube a la vez el tinte y el fondo: 0x00, 0x11, 0x22... el caracter queda de un solo color
+L 0x4b97 CARGA_FUENTE  Descomprime la fuente en 0x2080 y le pone color
+D 0x4B00 0x4B1C guion_panel  Guion de la tabla de nombres: HI, SCENE, SCORE y REST
+D 0x4B1C 0x4B2F guion_pulsa_espacio  Guion de la tabla de nombres: PUSH SPACE KEY
+D 0x4B2F 0x4B3C rotulo_konami  (c) KONAMI y 1984. Sirve dos veces: es el segundo bloque del guion de 0x4B1C y es lo que 0x42BC copia al panel con dos LDIRVM
+D 0x4B3C 0x4B49 guion_game_over  Guion de la tabla de nombres: GAME  OVER
+D 0x4B49 0x4B5F guion_video_cartridge  Guion de la tabla de nombres: VIDEO CARTRIDGE entre dos adornos
+D 0x4B5F 0x4B71 guion_del_demo  Los mandos que se inventa 0x449E en el demo: un paso cada 32 fotogramas, y 0xFF vuelve al principio
+F 0x4B5F 18
+C 0x4b97 el guion de la fuente
+C 0x4b9a los patrones van a 0x2080, o sea al caracter 0x10
+C 0x4ba0 la fuente entera en blanco sobre negro
+C 0x4ba5 0x250 bytes son los 74 caracteres
+D 0x4BAB 0x4D61 patrones_fuente  Guion comprimido: 592 bytes (74 caracteres, del 0x10 al 0x59) a 0x2080 en los tres tercios
+D 0x4D61 0x4E82 patrones_rotulo  Guion comprimido: 320 bytes (40 caracteres, del 0xC0 al 0xE7) a 0x2600 en los tres tercios; son las 52 piezas del rotulo del titulo, que 0x4E82 monta en cuatro filas
+D 0x4E82 0x4EBE guion_rotulo  Guion COMPRIMIDO (el de 0x4396, no el de nombres) que coloca el rotulo del titulo en la tabla de nombres: 14 celdas en la fila 6 columna 9, otras 14 en la 7, otras 14 en la 8 y 10 en la fila 9 columna 11
+
+L 0x4ebe APAGA_FICHAS  Pone las 32 fichas de sprite de 0xE0B0 fuera de la pantalla
+C 0x4ebe 32 fichas de cuatro bytes son 128
+C 0x4ec3 0xE0 en la fila deja la ficha fuera de la pantalla
+L 0x4ec9 SPRITES_A_VRAM  Vuelca los atributos: nueve fichas fijas y una tanda que rota
+C 0x4ec9 las nueve primeras fichas (dos del avion, tres de las balas y cuatro del gigante) van siempre delante
+C 0x4ecf 0x24 bytes son nueve fichas
+C 0x4ed5 de la ficha 9 en adelante van los objetos
+C 0x4edb el fotograma elige por donde empieza la tanda: 0, 1, 2 o 3
+C 0x4ee1 tres bytes por tanda
+C 0x4ee3 cuatro tandas seguidas de la tabla de siete
+C 0x4eeb primer byte: cuantos bytes lleva la tanda
+C 0x4eed y detras, de donde salen
+C 0x4ef1 los bytes van derechos al puerto del VDP
+C 0x4ef9 cuatro tandas y fuera
+D 0x4EFD 0x4F12 tabla_tandas_sprites  Siete tandas de cuantas fichas y de donde salen, que 0x4EC9 alterna segun el fotograma
+F 0x4EFD 3
+
+L 0x4f12 CARGA_SPRITES  Descomprime los patrones de sprite en 0x1800
+C 0x4f12 este ld hl es CODIGO MUERTO: DESC_VRAM lee el destino del propio guion, cuyos dos primeros bytes son 00 18
+C 0x4f15 el guion de los 48 sprites
+D 0x4F1B 0x5334 patrones_sprites  Guion comprimido: 1536 bytes a 0x1800, o sea 192 patrones de 8x8, que en 16x16 son 48 sprites
+
+L 0x5334 RECORRE_OBJETOS  Los siete huecos de 0xE200, de 16 bytes cada uno
+C 0x5334 los siete huecos de objeto
+C 0x5339 la rutina de turno espera el hueco en 0xE310
+C 0x533c hueco vacio, nada que hacer
+C 0x5341 y si no, a su rutina
+C 0x5348 16 bytes por hueco
+L 0x534f RUTINA_DE_OBJETO  Salta a la rutina del hueco (su byte +1) con push bc y ret
+C 0x534f el byte +1 dice que rutina lo maneja
+C 0x5351 la tabla de las 21 rutinas
+C 0x5354 dos bytes por rutina
+C 0x535d el push bc y el ret hacen de salto indirecto sin gastar registros
+D 0x535F 0x5389 tabla_rutinas_objeto  Las 21 rutinas de objeto, indexadas por el byte +1 del hueco
+F 0x535F w7
+
+B 0x5389 LAS RUTINAS DE OBJETO. Una por tipo; 0x534F las llama por la tabla.
+C 0x5389 B a 0 deja el signo positivo: acelera hacia la derecha
+C 0x538b y la tabla positiva de 0x53CA
+C 0x5390 B a 0xFF es el signo negativo: acelera hacia la izquierda
+C 0x5392 con la tabla en negativo de 0x53D6
+C 0x5395 byte +2: la cuenta de pasos
+C 0x5398 los dieciseis primeros fotogramas va derecho
+L 0x539c PERSIGUE_X  Acelera la columna del objeto segun lo lejos que este el avion
+C 0x539c de +1 a +11: la columna del objeto
+C 0x53a0 0xE182 es la columna del avion
+C 0x53a4 lo que interesa es la distancia, sin signo
+C 0x53a8 los cuatro rra dejan la distancia partida por 16
+C 0x53ae asi que la tabla se indexa por lo lejos que esta el avion
+C 0x53b4 0xFB es -5: de la columna (+11) a la velocidad lateral (+6)
+C 0x53b8 suma la velocidad nueva a la que ya llevaba, en 16 bits
+C 0x53c0 el bit alto de la parte baja redondea...
+C 0x53c3 ...y el resultado tiene que caber entre -5 y 4
+C 0x53c7 pasado el tope, la parte alta se queda como estaba: eso limita la velocidad
+D 0x53CA 0x53D6 aceleracion_lateral_derecha  Cuanto acelera hacia la derecha segun la distancia (0 a 11) al avion; va a los bytes +6/+7 del hueco
+F 0x53CA 12
+D 0x53D6 0x53E2 aceleracion_lateral_izquierda  La misma tabla en negativo, para los que derivan hacia la izquierda
+F 0x53D6 12
+C 0x53e2 de +1 a +11: la columna
+C 0x53e6 la distancia al avion, ahora CON signo
+C 0x53ea 0x0080 es medio pixel por fotograma hacia un lado...
+C 0x53ef ...o hacia el otro
+C 0x53f6 con el avion a menos de diez columnas, se lanza
+C 0x53fc y si no, sigue derivando despacio
+C 0x5403 patrones 0x10 y 0x14, cambiando cada dos fotogramas
+C 0x540a nada de velocidad lateral: cae en vertical
+C 0x540f byte +5: velocidad de caida 3, que es picar de verdad
+C 0x5416 y se cambia por la rutina 0x12, la del kamikaze
+C 0x541c patrones 0x10 y 0x14 para el picado
+C 0x5423 acelera hacia la izquierda...
+C 0x5426 ...con la tabla de 0x5449
+C 0x5429 byte +2: el paso
+C 0x542c los ocho primeros pasos va derecho
+C 0x542f y al llegar al paso 0x40 da la vuelta
+C 0x5437 el complemento del signo: lo que iba a la izquierda va a la derecha
+C 0x543a de +2 a +6, la velocidad lateral
+C 0x5441 el tipo 3 es el mismo, con la tabla al reves...
+C 0x5444 ...y arrancando hacia la derecha
+D 0x5449 0x5455 aceleracion_izquierda_tipo_4  Cuanto acelera hacia la izquierda el tipo 4, segun la distancia (0 a 11) al avion
+F 0x5449 12
+D 0x5455 0x5461 aceleracion_derecha_tipo_3  La misma hacia el otro lado, para el tipo 3
+F 0x5455 12
+C 0x5461 el tipo 5 empieza la vuelta por el paso 0
+C 0x5465 y el tipo 6 por el 6, o sea media vuelta despues
+C 0x5467 la vuelta no arranca hasta el paso 8
+C 0x5469 con el gigante delante arranca dos pasos antes...
+C 0x5472 ...y gira al reves: el bit 3 le da la vuelta al sentido
+C 0x5474 byte +2: el paso del giro
+C 0x5475 un paso de giro cada 16 fotogramas
+C 0x547d el giro dura catorce pasos desde el paso B
+C 0x5484 con el indice 0 o el 14 el giro va hacia delante...
+C 0x548b ...y con el 6 o el 8, hacia atras
+C 0x548d dieciseis posiciones en la vuelta
+C 0x5490 cuatro bytes por posicion: dos incrementos de 16 bits
+C 0x5498 uno para la fila y otro para la columna
+C 0x549b bytes +4/+5 la primera vuelta, +6/+7 la segunda
+C 0x549c la parte baja del incremento
+C 0x54a1 y la alta, con el acarreo
+C 0x54a4 cuatro bytes por posicion de la vuelta: dos incrementos
+C 0x54a7 los patrones estan en +12
+C 0x54ae los cuatro patrones del giro arrancan en 0x30
+C 0x54b0 3 es el zumbido de este bicho
+C 0x54b2 cambia de patron cada dos fotogramas, cuatro en total
+C 0x54b9 C es el primer patron de los cuatro
+C 0x54bb de +12 a +14: el patron de la segunda ficha
+C 0x54bd que va cuatro mas alla
+D 0x54C4 0x5504 tabla_giro  Dieciseis parejas de incrementos de 16 bits: la vuelta completa
+F 0x54C4 w2
+C 0x5505 LEE_PUNTERO deja HL en +7 y DE con la velocidad lateral de +6/+7
+C 0x550a de +7 a +11: la columna
+C 0x550f pegado al borde izquierdo, rebota hacia la derecha
+C 0x5516 y pegado al derecho, hacia la izquierda
+C 0x5521 velocidad lateral nueva, bytes +7 y +6
+C 0x5524 de +6 a +12, los patrones
+C 0x5528 el bit 3 del contador cambia el dibujo cada ocho fotogramas
+C 0x552d una pareja de patrones...
+C 0x5532 ...o la otra; van juntos en un solo ld de
+C 0x5535 +12 el primero y +14 el segundo
+C 0x5539 0xFFF4 es -12: de vuelta al byte +2
+C 0x553f bits 2 y 3 del estado: alguna de las dos piezas esta explotando
+C 0x5541 sin explosion, solo zumba
+C 0x5546 el nibble alto del byte bajo del hueco es el numero de hueco (0 a 6)
+C 0x554e 0xE1C6 lleva una cuenta por hueco, que es la que dura la explosion
+C 0x5554 un fotograma menos de explosion
+C 0x5557 de +2 a +12
+C 0x555b la explosion cambia de dibujo a mitad de cuenta
+C 0x555d patron 0x94 y color 6...
+C 0x5562 ...o patron 0xA0 y color 15
+C 0x5565 bit 2: la primera pieza esta explotando
+C 0x556f bit 3: la segunda
+C 0x5577 mientras quede cuenta no se apaga nada
+C 0x557a agotada la cuenta, el color a cero borra la pieza
+C 0x5582 y lo mismo con la otra
+C 0x5588 bits 0 y 1: piezas que siguen vivas
+C 0x558a sin ninguna, el hueco queda libre
+C 0x558e y si queda alguna, el estado se queda solo con esos dos bits
+C 0x5594 0x81 es el zumbido de este objeto
+C 0x5599 el bit 0 del contador da un vaiven de un pixel
+C 0x55a3 de +1 a +9: la fila
+C 0x55a8 las dos restas parten la pantalla: por debajo de 0x60 no tira a la derecha...
+C 0x55b0 ...y por debajo de 0x18 tira a la izquierda
+C 0x55b8 de +9 a +13: el color de la primera ficha
+C 0x55bc color 1 o 0 segun el sentido
+C 0x55c2 y color 15 o 0 en la segunda: el bicho parpadea de lado a lado
+C 0x55c7 solo se toca cada cuatro fotogramas
+C 0x55ce byte +2, que aqui es el contador de la animacion
+C 0x55d2 los cinco rra dejan los bits 6 y 7 de la cuenta: la pareja cambia cada 256 fotogramas
+C 0x55d9 las cuatro parejas de 0x55FC
+C 0x55e2 solo la oleada 9 usa la tabla...
+C 0x55e9 ...los demas van siempre con la pareja fija 0x7C/0x80
+C 0x55ed byte +4: la parte baja de la velocidad de caida
+C 0x55f0 byte +12: el patron de la primera ficha
+C 0x55f5 y el +14 va cuatro patrones mas alla
+D 0x55FC 0x5604 tabla_pareja_oleada_9  Cuatro parejas que 0x55C7 alterna; fuera de la oleada 9 siempre usa la fija 0x80/0x7C
+F 0x55FC 2
+C 0x5604 el 3 es el zumbido del bicho que gira
+C 0x5608 0x85 es el otro aviso
+
+L 0x560a SUENA_SI_CAMBIA  Pide el sonido A salvo que el canal C ya lo este tocando
+C 0x560a no se vuelve a pedir un sonido que el canal C ya esta tocando
+C 0x5612 byte +2: el estado
+C 0x5615 bits 2 y 3: hay alguna pieza explotando
+C 0x5619 de +2 a +12: los patrones
+C 0x561e el nibble alto da el numero de hueco
+C 0x5625 y con el, la cuenta de explosion de este hueco
+C 0x562f a mitad de cuenta cambia el dibujo de la explosion
+C 0x5631 patron 0x98 al final...
+C 0x5635 ...y 0xA0 al principio
+C 0x5637 bit 2: primera pieza
+C 0x563d color 15 para la explosion
+C 0x5642 bit 3: segunda pieza
+C 0x564b agotada la cuenta se apagan
+C 0x5653 color a cero, que es borrar
+C 0x565d bits 0 y 1: lo que quede vivo
+C 0x5660 sin nada vivo, el hueco se libera
+C 0x5663 0xFFF5 es -11: vuelta al byte +2
+C 0x5669 IX se queda el hueco entero para leerlo por indice
+C 0x566f byte +2: el paso
+C 0x5671 a los 64 pasos se parte en dos
+C 0x5675 la rutina 0x13 son las dos piezas que persiguen al avion
+C 0x5677 mira a que lado queda el avion
+C 0x567d 0x140 son 320 hacia la derecha...
+C 0x5682 ...y 0xFEC0 los mismos 320 hacia la izquierda
+C 0x5686 el hueco cambia de forma: +2 es la primera pieza viva
+C 0x5689 +3 la fila de la primera pieza, heredada del bicho
+C 0x568e +4/+5 la velocidad lateral, hacia el avion
+C 0x5693 +7 la columna, ocho pixeles a la derecha del bicho
+C 0x569b +8 y +9: patron 0x8C y color 11
+C 0x56a1 byte +10: la cuenta atras hasta el disparo
+C 0x56a6 +11 marca viva la segunda pieza
+C 0x56a9 +12 y +13: la fila y la columna de la segunda
+C 0x56ac 0x06 es el estallido del bicho al partirse
+C 0x56b1 las dos piezas van a por la columna del avion
+C 0x56bc con las dos piezas apagadas...
+C 0x56c2 +2 la primera y +11 la segunda
+C 0x56cd ...el hueco queda libre
+C 0x56cf y un objeto vivo menos
+C 0x56d4 +2 a cero: esta pieza ya no esta
+C 0x56d9 B prima se guarda si la pieza esta viva o explotando
+C 0x56db byte +3: la fila, que baja dos pixeles por fotograma
+C 0x56df pasada la fila 0xC0 la pieza se ha ido
+C 0x56e9 de +3 a +7: la columna
+C 0x56ed 0xE182 es la columna del avion
+C 0x56ee diez pixeles hacia el avion, sea el lado que sea
+C 0x56f7 de +7 a +4: la velocidad lateral acumulada
+C 0x5702 la velocidad se queda entre -4 y 3
+C 0x570c bytes +6 y +7: la columna, en 16 bits
+C 0x5714 fuera de la franja de 8 a 0xB0 el color se pone a cero y la pieza no se ve
+C 0x571f byte +9: el color
+C 0x5726 el valor 2 en +2 quiere decir que le han dado
+C 0x572a otra vez el numero de hueco, para su cuenta de explosion
+C 0x5738 agotada la cuenta, la pieza muere
+C 0x573c la marca de muerta viaja en C prima
+C 0x5741 la explosion cambia de dibujo a mitad de cuenta
+C 0x5744 patron 0x98 al final y 0xA0 al principio
+C 0x574a byte +8: el patron de la explosion
+C 0x574e si la pieza estaba a la vista, la explosion va en blanco
+C 0x5755 C prima distinto de cero: la pieza ha muerto
+C 0x575d +2 a cero: fuera
+C 0x5761 el numero de hueco por ocho da su ficha de sprite
+C 0x576b fila 0xC3: la ficha se va de la pantalla
+C 0x576e la segunda pieza empieza en el byte +11
+C 0x5775 +11 a cero: la segunda pieza ya no esta
+C 0x5779 C prima marca la muerte y B prima si esta explotando
+C 0x577d byte +12: la fila, dos pixeles por fotograma
+C 0x5781 pasada la 0xC0 se ha ido por abajo
+C 0x5789 byte +13: la columna
+C 0x578a esta pieza solo se mueve de lado uno de cada dos fotogramas: es mas lenta que la primera
+C 0x5790 un pixel hacia la columna del avion
+C 0x579c el valor 2 en +11 quiere decir que le han dado
+C 0x57a2 el numero de hueco, para su cuenta de explosion
+C 0x57b0 agotada la cuenta, muere
+C 0x57b9 patron 0x98 al final de la cuenta y 0xA0 al principio
+C 0x57c3 bytes +14 y +15: patron y color de la explosion
+C 0x57c8 C prima distinto de cero: la pieza ha muerto
+C 0x57d2 +11 a cero: fuera
+C 0x57d5 el numero de hueco por ocho da su ficha, y esta va en la segunda (0xE0D8)
+C 0x57de fila 0xC3: fuera de la pantalla
+C 0x57e1 el numero de hueco da su cuenta de explosion
+C 0x57ef agotada la cuenta, el hueco queda libre
+C 0x57f5 byte +0: el tipo, que aqui elige la pareja de patrones
+C 0x57f7 de +0 a +9
+C 0x57fb a mitad de cuenta cambia el dibujo
+C 0x57fd patrones 0x94 y 0x98...
+C 0x5802 ...o 0x9C y 0xA0
+C 0x5806 el tipo 16 lleva su propia pareja de patrones
+C 0x580a 0xFC en las dos fichas...
+C 0x580f ...y 0xFC con 0xA4 para el tipo 17
+C 0x5812 de +9 a +12
+C 0x5818 color 6 la primera ficha y 15 la segunda
+L 0x5820 SUBE_ESCENA  Suma uno (en BCD) al numero de escena y lo repinta
+C 0x5820 la escena es un byte BCD, asi que el daa detras de la suma
+C 0x582a y se repinta en el panel
+L 0x5830 PINTA_FONDO  Dibuja el fondo entero en la posicion actual
+C 0x5830 dibuja el fondo entero sin mover la posicion
+B 0x5837 EL FONDO. Se redibuja entero una vez cada 16 fotogramas.
+L 0x5837 PASO_DE_FONDO  Avanza la posicion en la fase y redibuja el fondo
+C 0x5837 el fondo se congela mientras el gigante esta en pantalla
+C 0x583f solo uno de cada 16 fotogramas
+C 0x5845 0xE1B8/B9 es la posicion en la fase
+C 0x584b al desbordar el byte bajo de la posicion, suma una escena
+C 0x5850 una fila mas de fase
+C 0x5852 la fase mide 0x780 filas; al pasarse vuelve a cero y sube la dificultad
+C 0x585c pasado el final, vuelta a la fila cero
+C 0x585f y una vuelta mas de dificultad...
+C 0x5863 ...que topa en 2: de la tercera vuelta en adelante ya no sube
+C 0x586c la vuelta cuenta como escena nueva
+C 0x586f posicion nueva
+C 0x5874 0xE1BA es el desplazamiento fino: 0,2,4...14, o sea 2*(posicion y 7)
+C 0x5877 pasado el 14 vuelve a cero, que es cuando se cambia de tira
+C 0x587e y ahora se recupera la posicion entera para partirla entre ocho
+C 0x5881 el indice del mapa es la posicion dividida entre ocho
+C 0x588a 0xE1D1 se queda el indice del mapa
+C 0x588e cuatro codigos de tira, guardados de 0xE1BE hacia abajo
+C 0x5892 cuatro codigos, guardados de 0xE1BE hacia abajo
+C 0x5899 con cuatro tiras sobran para llenar las 24 filas
+C 0x589b el mapa se lee hacia delante y se guarda hacia atras
+C 0x58a1 la primera tira, la de mas abajo
+C 0x58a5 24 filas de pantalla
+C 0x58a8 el desplazamiento fino elige cual de las ocho copias de la tira se usa
+C 0x58ae empieza por la fila de ABAJO, 0x3AE1, y va subiendo
+C 0x58b1 0x0006 tiene el puerto de datos del VDP
+C 0x58b8 un byte de mando del guion de la tira
+C 0x58bc sin el bit 7 es un cero (fin de fila) o una repeticion
+C 0x58bf 0xFF acaba la tira
+C 0x58c2 y el resto es copiar (n y 0x7F) celdas tal cual
+C 0x58c4 las celdas van derechas al puerto
+C 0x58cc el cero cierra la fila y sube una
+C 0x58d0 la misma celda B veces, con el nop de respiro del VDP
+C 0x58d7 24 filas y para
+C 0x58db 0x20 es una fila; restarlo sube una
+C 0x58e4 cambiar de tira tambien cierra la fila
+C 0x58e8 y arranca el guion de la tira nueva
+L 0x58ee SIGUIENTE_TIRA  Coge el siguiente codigo de tira y devuelve su subtabla
+C 0x58ee 0xE310 lleva el puntero al codigo de tira que toca
+C 0x58f2 y va bajando: los codigos se guardaron del reves
+C 0x58f6 dos bytes por tipo de tira
+C 0x58f7 0x59F3 son los veinte punteros, uno por tipo
+D 0x58FF 0x59F3 mapa_de_la_fase  EL MAPA: 244 codigos de tira (0 a 19), uno por cada ocho filas de la fase
+F 0x58FF 16
+D 0x59F3 0x5A1B tabla_tipos_de_tira  Un puntero por tipo de tira (20), a su subtabla de ocho variantes
+F 0x59F3 w4
+D 0x5A1B 0x5B5B subtablas_de_tira  Veinte subtablas de ocho punteros: la misma tira empezada 0 a 7 filas mas abajo
+F 0x5A1B w8
+D 0x5B5B 0x65E0 guiones_de_tira  Los 160 guiones comprimidos del fondo: 0x00 acaba fila, el bit 7 copia tal cual, de 1 a 0x7F repite, 0xFF acaba la tira
+C 0x65e0 los nueve disparos enemigos viven en 0xE270, 16 bytes cada uno
+C 0x65e8 byte +0 a cero: disparo apagado
+C 0x65ed topes de la columna: de 8 a 0xB0
+C 0x65f0 el disparo de tipo 2 (el que sale de un objeto) usa una franja mas estrecha
+C 0x65f8 el tipo 0xFF no se mueve solo: lo recoloca su objeto cada fotograma
+C 0x65fb HL a las velocidades (+1) y DE a las posiciones (+5)
+C 0x6603 bytes +5/+6: la fila, en 16 bits
+C 0x660a pasada la fila 0xC0 el disparo se ha ido por abajo
+C 0x6612 bytes +7/+8: la columna
+C 0x661a fuera de la franja, se apaga
+C 0x6623 16 bytes por disparo
+C 0x662e byte +0 a cero: el hueco de disparo queda libre
+C 0x6630 del hueco saca su ficha: 0xE10C es la ficha 23, la primera de los disparos
+C 0x663d fila 0xC3: la ficha se va de la pantalla
+
+L 0x6641 PASO_DISPAROS  Un paso de los disparos enemigos
+C 0x6641 los nueve disparos a sus nueve fichas
+C 0x6649 disparo apagado, ficha sin tocar
+C 0x664d de +0 a +6: la fila
+C 0x6656 +8 la columna, +9 el patron y +10 el color
+C 0x6661 seis bytes hasta el +0 del disparo siguiente
+C 0x6668 el hueco vacio se salta, pero la ficha se deja como estaba
+C 0x666c y son 16 bytes de salto, no 6
+C 0x6670 0xE1C1 cuenta los 60 fotogramas
+C 0x6675 y se recarga con 0x3C
+C 0x6678 0xE1D2 sube uno cada vez
+L 0x667c REPARTE_CHOQUES  Recorre los huecos buscando quien puede disparar
+C 0x667d pasado el 19 ya no se reparte nada
+C 0x6680 el bit 0 decide entre las dos parejas de topes
+C 0x6684 el jr c cae en el ultimo byte del ld bc de 0x6686, que se ejecuta como un inc bc: BC queda en 0xFE01 en vez de 0xFE00
+C 0x668a los siete huecos de objeto
+C 0x6690 hueco vacio, nada que soltar
+C 0x669b 16 bytes al siguiente
+C 0x66a3 byte +1: la rutina
+C 0x66a4 0x0800 es hacia abajo...
+C 0x66ac ...y la rutina 0x0B dispara hacia arriba
+C 0x66af de +1 a +9: la fila
+C 0x66b6 y +11 la columna
+C 0x66b7 el numero de hueco elige el hueco de disparo: el mismo numero
+C 0x66bf byte +0 a 2: disparo salido de un objeto
+C 0x66c5 bytes +1/+2: velocidad de fila, la que traia en BC prima
+C 0x66cc bytes +3/+4: velocidad de columna
+C 0x66d1 byte +6: la fila de salida
+C 0x66d4 byte +8: la columna
+C 0x66d6 patron 0x88 y color 15, que es el disparo enemigo
+C 0x66dc byte +0: el tipo del hueco
+C 0x66e1 los tipos por debajo de 0x12 miran su tanda
+C 0x66e5 el gigante 1 dispara mas despacio (0x20) que el 2 (0x18)
+C 0x66ef la dificultad acorta la cuenta: dos fotogramas menos por vuelta
+C 0x66f4 la cuenta que queda es 0x20 (o 0x18) menos el doble de la dificultad
+C 0x66f8 0xE321 son las dos tandas de la oleada, seis bytes cada una
+C 0x66fe si el tipo esta en la tanda, coge la espera siguiente de su secuencia
+C 0x6702 seis bytes a la otra tanda
+C 0x6709 fuera de las dos tandas, la cuenta se queda a cero y este hueco no vuelve a disparar
+C 0x670e byte +4 de la tanda: la secuencia de esperas entre disparos
+C 0x6712 la dificultad corre la secuencia
+C 0x6717 0x770F es la tabla de secuencias
+C 0x6720 y el +5 es el paso dentro de ella
+C 0x6724 avanza un paso
+C 0x6729 0xFF acaba la secuencia y la devuelve al principio
+C 0x6733 el gigante 1 lleva cuatro piezas...
+C 0x673b ...y el 2 solo dos
+C 0x673d las piezas del gigante son 0xE150, ocho bytes cada una
+C 0x6745 los siete huecos de objeto, de 16 bytes
+C 0x674d 0xE310 lleva el hueco y 0xE318 su tipo
+C 0x6754 hueco vacio, nada que disparar
+C 0x6757 los tipos 0x10 y 0x11 no disparan
+C 0x675f la cuenta esta en +3 de normal...
+C 0x6765 ...en +10 para el tipo 0x0B...
+C 0x6767 ...y en +1 de los tipos 0x12 en adelante
+C 0x676d el byte de la cuenta
+C 0x6771 con la cuenta a cero este hueco ya no dispara
+C 0x6774 al llegar a cero, suelta el disparo
+C 0x677a el salto ya viene en DE: 16 para los huecos y 8 para las piezas del gigante
+C 0x677e recarga la cuenta para el proximo disparo
+C 0x6781 mira de que punto sale el disparo
+C 0x6785 fuera de la franja de filas 9 a 0xA8 no se dispara
+C 0x678a 0xE316 y 0xE317 son los signos de la fila y de la columna
+C 0x6790 la posicion del avion
+C 0x6794 diferencia de filas...
+C 0x6797 ...y si el avion esta mas arriba, se le da la vuelta y se marca el signo
+C 0x67a0 los cinco rra dejan la distancia partida por 32: tres bits
+C 0x67a8 lo mismo con las columnas
+C 0x67bd los nueve disparos
+C 0x67c2 en la oleada 0x0A solo se pueden usar cinco de los nueve
+C 0x67ce disparo libre es el que tiene el tipo a cero
+C 0x67d2 16 bytes al siguiente
+L 0x67da ELIGE_DIRECCION  Elige la direccion del disparo enemigo hacia el avion
+C 0x67da 0xE314 se queda el disparo elegido
+C 0x67dd seis columnas por fila en la tabla de 0x68F3
+C 0x67e3 la tabla dice que direccion tomar segun el octante
+C 0x67ea 0xFF (o cualquiera de 9 en adelante) es que desde ahi no se dispara
+C 0x67ee toma tres bits del registro R para desviar la punteria
+C 0x67f5 tras el rra de arriba el acarreo esta siempre puesto, asi que el jr nc nunca salta y el ld a,0xFF se ejecuta siempre
+C 0x67fc el desvio se suma a la direccion...
+C 0x67fd ...y si se sale de las nueve, se queda la de la tabla
+C 0x6802 la tabla de direcciones de 0x6917
+C 0x6805 cuatro bytes por direccion: dos velocidades de 16 bits
+C 0x680b la segunda palabra es la velocidad de columna
+C 0x680e con el signo puesto, la fila va hacia arriba
+C 0x6815 los tipos 0x12 en adelante caen medio pixel mas por fotograma
+C 0x6824 byte +0 a 1: disparo normal
+C 0x6827 bytes +1/+2: la velocidad de fila
+C 0x682d y el signo de la columna
+C 0x6834 bytes +3/+4: la velocidad de columna
+C 0x6839 0xE312 trae el punto de salida
+C 0x683e byte +6 la fila y +8 la columna
+C 0x6843 patron 0x88 y color 15
+C 0x6848 los tipos 5 y 9 avisan al disparar
+C 0x6852 0x89 es ese aviso
+C 0x6857 el complemento a dos, byte a byte
+C 0x685f la plantilla del hueco lleva el desvio del origen en +4/+5
+C 0x6866 byte +0: el tipo del hueco
+C 0x686c los tipos 9, 10 y 11 tienen su propia manera de elegir el punto
+C 0x6878 y los de 0x12 en adelante lo sacan de su plantilla
+C 0x687c el tipo 6 mide el doble de ancho: el disparo sale ocho pixeles a la derecha
+C 0x6882 de +0 a +9: la fila
+C 0x6889 y +11 la columna
+C 0x688c 0xE312 se queda el punto de salida
+C 0x6891 el punto sale igual que en el caso general...
+C 0x6895 ...pero el tipo 9 solo dispara con el patron 0x74
+C 0x6899 con cualquier otro patron se tira el retorno y no se dispara
+C 0x689b byte +2: que piezas del tipo 10 siguen vivas
+C 0x68a2 con las dos vivas, el registro R elige
+C 0x68a6 bit 0: solo la primera
+C 0x68a9 bit 1: solo la segunda
+C 0x68ac sin ninguna viva, se tira el retorno
+C 0x68b1 la segunda pieza va 0x40 pixeles a la derecha
+C 0x68b7 el bit 0 de R elige pieza
+C 0x68be byte +1: la rutina
+C 0x68c4 si aun no se ha partido en dos, el caso general
+C 0x68c8 el bit 0 de R elige cual de las dos piezas dispara
+C 0x68cd byte +11: la segunda pieza, con su fila y su columna
+C 0x68d6 y solo dispara si esta viva
+C 0x68da si no, se tira el retorno
+C 0x68dc byte +2: la primera pieza
+C 0x68e6 tambien tiene que estar viva
+L 0x68ec LEE_PUNTERO  DE = la palabra que hay en HL + A
+D 0x68F3 0x6917 tabla_direccion_disparo  Seis por seis: que direccion toma el disparo segun donde este el avion (0xFF = no dispara)
+F 0x68F3 6
+D 0x6917 0x693B tabla_seno_disparo  Nueve direcciones, cuatro bytes cada una: velocidad de fila y velocidad de columna, un cuarto de vuelta con radio 320. OJO: las entradas 3 y 5 estan INTERCAMBIADAS respecto de la tabla de senos que forman las otras siete
+F 0x6917 w2
+
+L 0x693b HAY_CHOQUE  Prueba de choque contra la caja de 0xE1C4/0xE1C5
+C 0x693b entra con BC y DE: la posicion de cada uno de los dos que se prueban
+C 0x693c 0xE1C2/C3 es la caja de uno y 0xE1C4/C5 la del otro
+C 0x6940 suma de las dos anchuras: el margen dentro del que hay choque
+C 0x694a el registro I hace de guardarropa: con el modo de interrupcion 1 nadie mas lo usa
+C 0x694c diferencia de filas
+C 0x6951 y el desplazamiento que centra la comparacion
+C 0x695a si la diferencia se sale del margen, no hay choque...
+C 0x695e ...y el ccf devuelve el acarreo al derecho: puesto quiere decir que chocan
+C 0x6961 el mismo margen vale para las columnas
+C 0x6963 diferencia de columnas
+C 0x6967 y la misma prueba: si cabe, hay choque
+C 0x696a con el avion ya muerto no se prueba nada
+C 0x696f la caja del avion: de +3 a +13
+C 0x6975 y la del otro, mientras nadie la cambie: de +6 a +10
+C 0x697b BC sale con la fila y la columna del avion
+C 0x6983 byte +0 de la pieza: sube uno por cada impacto
+C 0x6989 y arranca su explosion
+C 0x698c el gigante 1 tiene la ultima pieza en 0x14...
+C 0x6994 ...y el gigante 2 en 0x17
+C 0x6996 mientras no sea la ultima, solo suena
+C 0x6998 0x0A es el golpe sin romper
+C 0x699d 0xE143 son las piezas que quedan por romper
+C 0x69a1 el jr nz cae en el 03 del ld (hl),3 de aqui abajo, que se ejecuta suelto como un inc bc. Otro byte ahorrado
+C 0x69a6 rota la ultima pieza: el gigante se abre
+C 0x69a8 0x50 es el estallido de la pieza
+C 0x69ad mil puntos por pieza
+C 0x69b3 con todas las piezas rotas...
+C 0x69b8 ...cinco mil puntos mas...
+C 0x69c3 ...y otros cinco mil si es el gigante 2
+C 0x69c9 la bala se gasta en el impacto
+C 0x69ce las tres balas del avion
+C 0x69d4 0xE1CD lleva el numero de bala
+C 0x69d9 C es la fila de la bala
+C 0x69db de 0xC3 para arriba la bala esta apagada
+C 0x69e0 B la columna y el byte siguiente el patron
+C 0x69e3 la bala normal (patron 8) tiene una caja de dos pixeles...
+C 0x69ea ...y la mejorada, de doce: acierta mucho mas facil
+C 0x69ec 0xE1C2/C3 es la caja de la bala
+C 0x69f6 una bala mas probada
+C 0x69f9 cuatro bytes a la ficha siguiente
+C 0x6a00 las piezas del gigante empiezan en 0xE150
+C 0x6a04 cuatro piezas el gigante 1 y dos el 2
+C 0x6a10 0xE310 lleva la pieza de turno
+C 0x6a13 pieza a cero: no esta
+C 0x6a17 y con 0x17 ya esta rota
+C 0x6a1b bytes +4 y +5 de la pieza: su fila y su columna
+C 0x6a22 y a probar el choque
+C 0x6a2b ocho bytes por pieza
+C 0x6a34 la caja del avion, y de paso mira si esta vivo
+C 0x6a38 los nueve disparos enemigos
+C 0x6a42 disparo apagado, nada que probar
+C 0x6a46 bytes +6 y +8: la fila y la columna del disparo
+C 0x6a4e prueba el choque con la caja del avion
+C 0x6a56 16 bytes al disparo siguiente
+C 0x6a5e byte +0 del disparo
+C 0x6a62 el disparo fijo (0xFF) no se apaga al tocar
+C 0x6a65 byte +10 del hueco: mira si el objeto que lo cuelga sigue ahi
+C 0x6a6d el disparo que ha acertado se apaga
+C 0x6a74 el tipo 0x10 atraviesa el avion sin hacerle nada
+C 0x6a77 y el 0x11 no mata: solo mejora el disparo
+C 0x6a7b 0xE1CF a 1: el avion esta muriendo
+C 0x6a81 0x80 fotogramas de explosion
+C 0x6a83 0x5C es el estallido del avion
+C 0x6a8a 0xE1DD a 1 corta los avisos de sonido de los objetos
+C 0x6a8e 0xE1D5 es la mejora del disparo
+C 0x6a92 no pasa de 2, que es el tope
+C 0x6a97 0x8F es el aviso de recogida
+C 0x6a9c la caja del avion
+C 0x6aa0 los siete huecos de objeto
+C 0x6aa9 0xE310 lleva el hueco de turno
+C 0x6aac el tipo por dos, que es el indice de la tabla de cajas
+C 0x6ab3 la rutina 0x13 lleva dos piezas y se prueba aparte
+C 0x6ab7 y la 0x14 no choca con nadie
+C 0x6abc bytes +8 y +11: la fila y la columna del objeto
+C 0x6ac4 la base es 0x6BB1, dos bytes antes de la tabla: el indice es 2*tipo
+C 0x6acb 0xE1C4/C5 se queda la caja de este tipo
+C 0x6ad3 y a probar
+C 0x6adb 16 bytes al hueco siguiente
+C 0x6ae5 0xE1CE dira si el objeto ha muerto en el golpe
+C 0x6af1 si el objeto ha muerto, el avion se lo lleva por delante
+C 0x6afc las tres balas
+C 0x6b02 0xE1CD lleva el numero de bala
+C 0x6b09 de 0xC3 para arriba la bala esta apagada
+C 0x6b11 la bala normal tiene caja de dos pixeles y la mejorada de doce
+C 0x6b1a 0xE1C2/C3 es la caja de la bala
+C 0x6b27 cuatro bytes a la ficha siguiente
+C 0x6b2e la fila 0xE0 tambien es bala apagada
+C 0x6b32 los siete huecos
+L 0x6b38 RECORRE_CHOQUES  Mira si algun objeto choca con el avion o con sus balas
+C 0x6b3b 0xE310 lleva el hueco
+C 0x6b3f los tipos 0x10 y 0x11 no se pueden derribar
+C 0x6b47 la rutina 0x13 se prueba pieza a pieza
+C 0x6b4d el tipo por dos: el indice de la tabla de cajas
+C 0x6b50 la base es 0x6BB1, dos bytes antes de la tabla: el indice es 2*tipo
+C 0x6b58 0xE1C4/C5 se queda la caja
+C 0x6b61 la rutina 0x14 no encaja balas
+C 0x6b65 bytes +8 y +11: la fila y la columna
+C 0x6b6d y a probar
+C 0x6b76 16 bytes al siguiente
+C 0x6b85 las dos piezas usan una caja fija de 0x0A
+C 0x6b8c byte +2: bit 0, la primera pieza esta viva
+C 0x6b91 su fila en +3 y su columna en +7
+C 0x6b98 prueba el choque
+C 0x6ba1 byte +11: bit 0, la segunda pieza
+C 0x6ba8 con su fila en +12 y su columna en +13
+D 0x6BB3 0x6BD5 tabla_caja_de_choque  La caja de choque de cada tipo de objeto (base 0x6BB1, tipos 1 a 17): el primer byte es el borde de arriba (que vale tambien para la izquierda) y el segundo la SUMA de los dos bordes, asi que restando sale el de abajo. La misma pareja se usa para las filas y para las columnas
+F 0x6BB3 2
+C 0x6bd5 0xE1CE dira si el golpe ha matado al objeto
+C 0x6bdc byte +0: el tipo
+C 0x6bdd el tipo 6 tiene dos mitades
+C 0x6be2 el 10 tambien, y ademas arrastra un disparo fijo
+C 0x6be7 el tipo 7 aguanta el golpe
+C 0x6beb y el 9 solo se rompe en un fotograma concreto
+C 0x6bf0 los tipos 0x10 y 0x11 (los premios) explotan sin mas
+C 0x6bf4 y los del 0x0D al 0x0F son los de la tanda, que avisan antes
+C 0x6bf9 byte +1 a 0x14: la rutina que solo hace de explosion
+C 0x6bfb el nibble alto da el numero de hueco
+C 0x6c02 0xE1C6 mas el numero de hueco es su cuenta de explosion
+C 0x6c08 0x10 fotogramas de explosion
+C 0x6c0e el premio de la mejora (0x11) se cobra sin ruido
+C 0x6c12 el premio de los puntos (0x10) suena distinto
+C 0x6c18 0x8E es el aviso de premio recogido
+C 0x6c20 byte +0: el tipo
+C 0x6c23 y +2, que en el tipo 5 dice que premio suelta
+C 0x6c26 solo el tipo 5 deja algo detras
+C 0x6c2a con el +2 en 1 deja el premio de puntos...
+C 0x6c2d ...con el 2 deja la mejora del disparo...
+C 0x6c31 ...y con cualquier otro valor no deja nada
+C 0x6c32 los tipos 0x12 en adelante no dan puntos
+C 0x6c36 dos bytes por tipo
+C 0x6c37 la base es 0x6D60, dos bytes antes de la tabla: el indice es 2*tipo
+C 0x6c3d y se cobran, en BCD
+C 0x6c40 0xE1CE a uno: ha muerto algo
+C 0x6c45 0xE0B8 es la primera bala
+C 0x6c48 0xE1CD dice cual de las tres
+C 0x6c4b cuatro bytes por ficha
+C 0x6c4f fila 0xE0: la bala se apaga al acertar
+C 0x6c52 0x0D es el golpe que no rompe
+C 0x6c59 de +1 a +13: el patron
+C 0x6c5e el tipo 9 solo se rompe cuando lleva el patron 0x74
+C 0x6c68 la mitad de abajo del tipo 6 esta 0x10 pixeles mas alla
+C 0x6c6b con la caja 0x00/0x10
+C 0x6c6f byte +2: que mitades siguen enteras
+C 0x6c73 0xE1C4/C5 se queda la caja de la mitad
+C 0x6c77 bits 0 y 1: mitad de arriba y mitad de abajo
+C 0x6c7a con el 1 solo queda la de arriba...
+C 0x6c7d ...con el 2 solo la de abajo...
+C 0x6c82 ...y con el 3 hay que probar las dos
+C 0x6c8b la segunda mitad va desplazada
+C 0x6c8f y se prueba en su sitio
+C 0x6c98 baja el bit 1 (ya no esta) y sube el 3 (esta explotando)
+C 0x6c9f la unica mitad que queda
+C 0x6ca8 baja el bit 0 y sube el 2
+C 0x6caf la segunda mitad del tipo 10 esta 0x40 pixeles mas alla
+C 0x6cb2 con la caja 0x04/0x10
+C 0x6cb8 si no ha muerto, no hay que borrar nada
+C 0x6cbd el numero de hueco
+C 0x6cc3 y con el, su disparo fijo, que se libera
+C 0x6ccb 0xE114 es la ficha de ese disparo
+C 0x6cd3 fila 0xC3: fuera de la pantalla
+C 0x6cd9 byte +2 a 2: la primera pieza esta explotando
+C 0x6ce3 byte +11 a 2: la segunda pieza esta explotando
+C 0x6cec el objeto explota como cualquier otro...
+C 0x6cef ...pero ademas cuenta para la tanda
+C 0x6cf3 0xE191 son los enemigos que quedan por salir
+C 0x6cf9 tumbar los cinco de la tanda vale mil puntos
+C 0x6d02 y el ultimo se convierte en el premio de tipo 0x10
+L 0x6d08 ARRANCA_EXPLOSION  Pone el hueco en modo explosion
+C 0x6d08 byte +2: cual de las dos explosiones toca
+C 0x6d0d con el +2 a cero no hay explosion: el hueco se vacia
+C 0x6d12 cinco bytes por explosion
+C 0x6d1b byte +0: el tipo del premio, 0x10 o 0x11
+C 0x6d1f byte +1 a 7: la rutina que no hace nada, o sea que solo cae
+C 0x6d21 de +1 a +12
+C 0x6d26 y los cuatro bytes de patrones y colores
+D 0x6D2C 0x6D36 tabla_explosion  Dos explosiones de cinco bytes: el primer patron y los cuatro de cola del hueco
+F 0x6D2C 5
+L 0x6d36 APAGA_HUECO  Vacia el hueco, salvo que sea el tipo 5, que deja premio
+C 0x6d36 byte +0: el tipo
+C 0x6d3a el tipo 10 tiene que soltar antes su disparo fijo
+C 0x6d41 y el tipo 5 no se vacia: se convierte en el premio que le toque
+C 0x6d45 hueco libre
+C 0x6d47 un objeto vivo menos
+C 0x6d4d el nibble alto del hueco, partido por dos: ocho bytes por hueco
+C 0x6d51 0xE0D4 es la primera ficha de los objetos
+C 0x6d56 el acarreo sube de pagina
+C 0x6d59 las dos fichas del hueco, con la fila 0xC3, se van de la pantalla
+D 0x6D62 0x6D84 tabla_puntos_por_objeto  Lo que vale cada tipo, en BCD de 16 bits (base 0x6D60, tipos 1 a 17)
+F 0x6D62 w2
+
+L 0x6d84 CARGA_PAISAJE  Descomprime los caracteres del paisaje y sus colores
+C 0x6d84 el guion de los caracteres del paisaje...
+C 0x6d87 ...que van a 0x2200, o sea al caracter 0x40
+C 0x6d8d y sus colores a 0x0200
+L 0x6d96 CARGA_GIGANTE  Carga los caracteres del enemigo grande que toque
+C 0x6d96 0xE1D9 dice por que paso va la carga
+C 0x6d9a con cero, espera al episodio 1 del gigante
+C 0x6da2 y entonces arranca la carga
+C 0x6da5 la carga se hace un fotograma despues, para no cargar con el fondo
+C 0x6da8 los patrones del gigante 1...
+C 0x6db1 ...o los del gigante 2
+C 0x6db4 los caracteres del gigante van a 0x2580, o sea al 0xB0
+C 0x6db8 en los tres tercios
+C 0x6dbc los colores del gigante 1...
+C 0x6dc1 ...o los del 2
+C 0x6dc4 y van a 0x0580, la misma altura en la tabla de colores
+D 0x6DCA 0x702B patrones_paisaje  Guion comprimido: 832 bytes (104 caracteres, del 0x40 al 0xA7) a 0x2200 en los tres tercios
+D 0x702B 0x70DE colores_paisaje  Guion comprimido: sus 832 bytes de color, a 0x0200 en los tres tercios
+D 0x70DE 0x7285 patrones_gigante_1  Guion comprimido: 488 bytes (61 caracteres, del 0xB0 al 0xEC) a 0x2580; el enemigo grande numero 1
+D 0x7285 0x7323 colores_gigante_1  Sus 488 bytes de color, a 0x0580 en los tres tercios
+D 0x7323 0x74A7 patrones_gigante_2  Lo mismo para el enemigo grande numero 2
+D 0x74A7 0x7522 colores_gigante_2  Y sus colores
+
+L 0x7522 ARRANCA_OLEADAS  Coloca la oleada que corresponde a la posicion de la fase
+C 0x7522 al empezar una vida, la oleada que toque a esa altura
+L 0x7527 REVISA_OLEADA  Cada 64 filas de avance, cambia de oleada
+C 0x7527 y luego, cada 64 filas de fase
+C 0x752e ni enemigo pendiente, ni cuenta de reparto, ni contador de disparos
+C 0x7538 los seis rr h / rra parten la posicion entre 64: el tramo
+C 0x754b 32 tramos, uno por cada 64 filas
+C 0x7552 0xE320 se queda la oleada
+C 0x7555 seis bytes por oleada
+C 0x7559 la tabla de las 25 oleadas
+C 0x755f dos tandas por oleada
+C 0x7561 las tandas viven en 0xE321, seis bytes cada una
+C 0x7564 +0 el tipo de enemigo...
+C 0x7568 ...+1 la cuenta atras, que arranca a cero...
+C 0x756b ...+2 la secuencia de esperas entre enemigos...
+C 0x756f ...+3 el paso dentro de esa secuencia...
+C 0x7572 ...+4 la secuencia de esperas entre disparos...
+C 0x7576 ...y +5 el paso dentro de esa
+D 0x757C 0x759C tabla_oleada_por_tramo  Que oleada (0 a 24) toca en cada uno de los 32 tramos de la fase
+F 0x757C 16
+D 0x759C 0x7632 tabla_oleadas  Veinticinco oleadas de seis bytes: dos tandas de tres, y cada tanda es tipo de enemigo, secuencia de esperas entre enemigos y secuencia de esperas entre disparos
+F 0x759C 6
+
+L 0x670d SIGUIENTE_DE_LA_LISTA  Avanza dentro de una secuencia; con 0xFF vuelve al principio
+L 0x7632 TOCA_OLEADA  Cuenta atras de las dos tandas y saca el siguiente enemigo
+C 0x7632 las dos tandas de la oleada
+C 0x7637 +0 a cero: tanda vacia
+C 0x763c +1 es la cuenta atras hasta el proximo enemigo
+C 0x763f seis bytes a la otra tanda
+C 0x7645 acarreo puesto: ninguna tanda ha soltado nada
+C 0x7647 0xE1B0 se queda el tipo que toca
+C 0x764b la dificultad corre la secuencia: cada vuelta es otra lista de esperas
+C 0x7650 los 33 punteros de 0x767A
+C 0x7657 +3 es el paso dentro de la secuencia, y sube uno
+C 0x765f C se guarda el primer byte por si hay que volver al principio
+C 0x7665 0xFF acaba la secuencia...
+C 0x766a ...y la devuelve al primer paso
+C 0x766e +1: la espera hasta el enemigo siguiente
+C 0x766f 0xE1B7 es la cuenta hasta el primer disparo del enemigo que viene
+C 0x7675 que sale de la otra secuencia, la de 0x770F
+D 0x767A 0x76BC tabla_secuencias_a  Treinta y tres punteros a las secuencias de ESPERAS entre enemigo y enemigo; el indice es la dificultad mas el byte +2 de la tanda
+F 0x767A w8
+D 0x76BC 0x770F secuencias_a  Las esperas: un byte por enemigo de la tanda, y 0xFF vuelve al principio
+D 0x770F 0x7737 tabla_secuencias_b  Veinte punteros a las secuencias de esperas ENTRE DISPARO Y DISPARO, que usa 0x670D
+F 0x770F w8
+D 0x7737 0x7766 secuencias_b  Las esperas entre disparos, tambien acabadas en 0xFF
+
+B 0x7766 EL ENEMIGO GRANDE. Va en dos mitades: el CUERPO lo pinta el fondo (las tiras de tipo 18 y 19, caracteres 0xB0-0xEC, unicas del mapa) y encima van CUATRO (o dos) SPRITES de 0xE150, que son las piezas a las que se dispara. 0x7766 lo arranca tres pasos antes de que el cuerpo entre en pantalla: en el indice 0x47 del mapa el gigante 1 (el cuerpo llega en 0x4A) y en 0xE7 el 2 (llega en 0xEA).
+L 0x7766 EPISODIO_GIGANTE  Un paso del episodio del enemigo grande (0xE140)
+C 0x7766 el episodio del gigante se mueve una vez cada 16 fotogramas
+C 0x776c 0xE140 lleva el episodio en los dos bits de abajo
+C 0x777e 0xE1D1 es el indice del mapa: en 0x47 arranca el gigante 1 y en 0xE7 el 2
+C 0x7783 tres pasos antes de que el cuerpo entre en pantalla (llega en 0x4A)
+C 0x7788 y lo mismo para el segundo (llega en 0xEA)
+C 0x778e fuera de esas dos posiciones no pasa nada
+C 0x7791 episodio 1: el gigante esta de camino
+C 0x7793 0xE1D6 dice cual de los dos es
+C 0x7797 0xE141 el fotograma y 0xE142 a cero
+C 0x779d el gigante 1 lleva cuatro piezas...
+C 0x77a2 ...y el 2 solo dos
+C 0x77a4 0xE143 son las piezas que quedan por romper
+C 0x77a5 0xE1D7 el fotograma del cuerpo y 0xE1D8 su cuenta atras
+C 0x77ab las piezas viven en 0xE150, ocho bytes cada una
+C 0x77b2 las cuatro posiciones del gigante 1...
+C 0x77b7 ...o las dos del 2
+C 0x77be el gigante 1 aguanta 0x20 impactos por pieza y el 2 solo 0x14
+C 0x77c4 cada vuelta de dificultad le quita cuatro impactos
+C 0x77cc 0xE144 y 0xE1B1 llevan lo que aguanta cada pieza
+C 0x77d3 0xE1DE: el aviso del final aun no ha sonado
+L 0x77d6 MONTA_GIGANTE  Rellena las cuatro (o dos) piezas de 0xE150
+C 0x77d6 byte +0: el tipo de la pieza, que arranca en 0x12
+C 0x77d9 byte +1 a 1
+C 0x77dc bytes +2 y +3: la fila y la columna de la tabla
+C 0x77e6 bytes +6 y +7: patron 0xBC y color 6
+C 0x77ee 0x91 es la musica del gigante
+C 0x77f3 0xE141 cuenta los pasos
+C 0x77f6 a los ocho pasos empieza el episodio 2, que es cuando se ve
+C 0x77fd el canal C es el que lleva la musica del gigante
+C 0x7801 si ya suena la 0x91, nada que hacer
+C 0x7804 y si no suena la 0x88, se pide
+C 0x780b 0xE141 cuenta los pasos del episodio 3
+C 0x780e a los 0x3F pasos el gigante se acaba
+C 0x7815 y la carga de sus caracteres vuelve a cero
+C 0x7819 a los 0x14 pasos suena el aviso
+C 0x781f 0xE1DE evita que suene mas de una vez
+C 0x7823 0x96 es ese aviso
+D 0x7828 0x7830 posiciones_gigante_1  Cuatro parejas de fila y columna: el gigante 1 son cuatro piezas en cuadro
+F 0x7828 2
+D 0x7830 0x7834 posiciones_gigante_2  Dos parejas de fila y columna: el gigante 2 son dos piezas
+F 0x7830 2
+
+L 0x7834 MUEVE_GIGANTE  Coloca las piezas del gigante en las fichas de sprite
+C 0x7834 primero el color de cada pieza...
+C 0x7837 ...y luego sus explosiones
+C 0x783f cuatro piezas el gigante 1 y dos el 2
+C 0x7847 0xE141 es el fotograma de bajada
+C 0x784a pasado el 0x20 las piezas ya no se colocan
+C 0x784d ocho pixeles por paso: 32 pasos son 256 pixeles
+C 0x7851 pieza rota, nada que colocar
+C 0x7857 byte +2: la fila de la tabla, mas la bajada
+C 0x785c entre las filas 0xC0 y 0xDF la pieza no se ve
+C 0x7862 fila 0xC3: fuera de la pantalla
+C 0x7865 byte +3: la columna
+C 0x7867 bytes +4 y +5: la fila y la columna de verdad, las que se miran
+C 0x786a ocho bytes a la pieza siguiente
+L 0x7870 GIGANTE_A_SPRITES  Copia las piezas a los atributos de sprite
+C 0x7870 de cada pieza se copian los bytes +4 a +7
+C 0x7873 0xE0C4 es la ficha 5: el gigante usa las fichas 5 a 8
+C 0x7878 cuatro piezas o dos
+C 0x7881 fila, columna, patron y color
+C 0x7886 y cuatro bytes hasta la pieza siguiente
+C 0x788f la pieza esta en 0xE150 mas ocho por pieza
+C 0x7892 se queda el numero de pieza...
+C 0x7897 ...y con el, su explosion en 0xE145
+C 0x789d 0x10 fotogramas de explosion
+C 0x78a0 las cuatro explosiones de 0xE145
+C 0x78a3 y las cuatro piezas de 0xE150
+C 0x78ac explosion a cero: esta pieza no explota
+C 0x78b2 agotada la cuenta, la pieza vuelve o desaparece
+C 0x78b4 patron 0x94 al principio y 0x9C al final
+C 0x78bc byte +6 el patron y +7 el color 11
+C 0x78c4 ocho bytes a la pieza siguiente
+C 0x78c9 acabada la explosion, la pieza recupera su color
+L 0x78ce PATRON_GIGANTE  Elige el COLOR de la pieza segun su tipo
+C 0x78ce byte +0: el tipo, que arranca en 0x12
+C 0x78d4 la tabla de colores de 0x7903
+C 0x78dd cada 32 fotogramas la pieza parpadea...
+C 0x78e2 ...poniendose del color 1, o sea negra
+C 0x78e5 byte +7: el color
+C 0x78e8 byte +6: el patron, que siempre es 0xBC
+C 0x78ed la ultima pieza del gigante 1 es la 0x14...
+C 0x78f5 ...y la del 2 la 0x17
+C 0x78f7 con cualquier otro tipo la pieza sigue ahi
+C 0x78fd y la ultima desaparece del todo
+D 0x7903 0x7909 tabla_color_pieza_gigante  COLOR de cada pieza del gigante (base 0x7903, indice el tipo menos 0x12); el patron es siempre 0xBC, y cada 32 fotogramas la pieza se pone del color 1, o sea negra
+F 0x7903 6
+C 0x7909 cuatro piezas o dos
+C 0x7913 las piezas de 0xE150
+C 0x7917 pieza a cero: ya no esta
+C 0x791d le da su color
+C 0x7920 ocho bytes a la siguiente
+
+L 0x7928 RITMO_GIGANTE  Cuenta atras entre fotogramas del gigante
+C 0x7928 0xE1D7 el fotograma del cuerpo y 0xE1D8 su cuenta
+C 0x792d mientras quede cuenta, el cuerpo no cambia
+C 0x792f cada fotograma tiene su propia espera
+C 0x7938 y el fotograma del cuerpo da la vuelta cada cuatro
+D 0x793E 0x7942 tabla_ritmo_gigante  Cuatro esperas, 0x1F, 0x5F, 0x1F y 0x7F, que se van alternando
+F 0x793E 4
+L 0x7942 PINTA_GIGANTE  Repinta las dos o tres celdas que se animan del cuerpo del gigante
+C 0x7942 0xE1D6 dice cual de los dos gigantes
+C 0x7949 el cuerpo solo se repinta con el fotograma 1 o el 3
+C 0x7951 la cuenta atras, partida por cuatro, elige el guion
+C 0x7958 el gigante 1 recorre los cuatro guiones al reves
+C 0x7961 los cuatro guiones del gigante 1...
+C 0x7967 ...o los del 2
+C 0x796a dos bytes por guion
+D 0x7970 0x7978 tabla_guiones_gigante_1  Cuatro guiones de tabla de nombres, uno por fotograma del gigante 1
+F 0x7970 w4
+D 0x7978 0x79A0 guiones_gigante_1  Los cuatro guiones: dos tiras de dos celdas en las filas 3 y 4, columnas 11 y 12
+D 0x79A0 0x79A8 tabla_guiones_gigante_2  Cuatro guiones para el gigante 2
+F 0x79A0 w4
+D 0x79A8 0x79D8 guiones_gigante_2  Los cuatro guiones: dos tiras de tres celdas en las filas 4 y 5, columnas 11 a 13
+
+B 0x79d8 EL SONIDO. Tres canales, 14 bytes de estado por canal desde 0xE01A.
+L 0x79d8 PIDE_SONIDO  Pide el sonido A, pero solo con partida en marcha
+C 0x79d8 el codigo se aparca en el registro alterno mientras se hacen las comprobaciones
+C 0x79d9 sin partida en marcha no hay efectos
+C 0x79df ni con el avion muriendo: 0xE1DD deja sonar solo su explosion
+L 0x79e5 PONE_SONIDO  Reparte el sonido A entre los canales que le tocan
+C 0x79e5 C guarda el codigo entero, con sus bits 6 y 7
+C 0x79e6 el codigo es A y 0x3F: los bits 6 y 7 no cuentan
+C 0x79e8 B es cuantos canales se van a ocupar, menos uno
+C 0x79ed menos de 9: un canal, el C, en 0xE032
+C 0x79f4 de 9 a 11: un canal, el B, en 0xE026
+C 0x79f8 el 17: dos canales, el B y el C
+C 0x79ff de 12 a 18: un canal, el A, en 0xE01A
+C 0x7a03 de 19 en adelante: los tres canales
+C 0x7a06 un solo canal
+C 0x7a07 no se pisa un sonido con codigo mas alto que el que se pide
+C 0x7a0b el codigo que se pide, sin los bits de arriba
+C 0x7a10 dos bytes por sonido
+C 0x7a11 la base es 0x7BED, dos bytes antes de la tabla: el indice es 2*codigo
+C 0x7a17 del codigo (+2) hacia atras, al arranque del canal
+C 0x7a19 byte +0: la cuenta de la nota, que arranca en 1 para que suene ya
+C 0x7a1c byte +1: la duracion
+C 0x7a1f byte +2: el codigo del sonido
+C 0x7a21 bytes +3 y +4: el puntero del guion
+C 0x7a27 doce bytes por canal
+C 0x7a2b y los guiones de los canales de un mismo sonido van seguidos en la tabla
+C 0x7a2f detras del 0xFE viene cuantas veces se repite
+C 0x7a30 byte +9: las vueltas dadas
+C 0x7a35 dadas todas, el canal calla
+C 0x7a38 y si no, se vuelve a lanzar el mismo sonido desde el principio
+C 0x7a41 D a 1 enciende la mezcla
+C 0x7a43 el mismo codigo otra vez: eso rearranca el guion
+C 0x7a48 byte +9: una vuelta mas
+C 0x7a4c 0xE03C es la copia del registro 7 del PSG, el de la mezcla
+C 0x7a50 de C (1, 3 o 5) saca el numero de canal: 1, 2 o 4
+C 0x7a56 tres rotaciones lo llevan a los bits de ruido: 8, 16 o 32
+C 0x7a59 con D a 1 se enciende, y si no se apaga
+C 0x7a5c el complemento apaga solo ese bit
+C 0x7a61 el tono del canal C se apaga si su ruido esta encendido...
+C 0x7a67 ...y se vuelve a encender si no
+C 0x7a69 lo mismo con el canal A
+L 0x7a71 CORTA_SONIDO  Escribe el byte de mezcla en el registro 7 del PSG
+C 0x7a71 el registro 7 del PSG lleva los seis bits de tono y ruido
+L 0x7a7a VUELCA_SONIDO  Un paso de los tres canales y volcado al PSG
+C 0x7a7a la mezcla de antes, tal cual: esto solo la vuelve a escribir
+C 0x7a80 C arranca en 1: el registro de periodo del canal A
+C 0x7a82 IX apunta dos bytes antes del codigo, o sea al byte +0 del canal
+C 0x7a87 tres canales
+C 0x7a89 doce bytes de un canal al siguiente
+C 0x7a8d byte +2: el codigo; a cero, el canal esta mudo
+C 0x7a94 dos mas en C: del registro 1 al 3 y del 3 al 5
+C 0x7a9c bit 6 del codigo: los que lo llevan no tocan la mezcla
+C 0x7aa3 bit 7 del codigo: guion largo, con sobre de volumen
+C 0x7aaa mientras dure la nota no se lee nada mas
+C 0x7aae bytes +3 y +4: por donde va el guion
+C 0x7ab5 0xFE repite el sonido
+C 0x7aba y de 0xFF en adelante lo acaba
+C 0x7abc los guiones largos tienen sus propias ordenes
+C 0x7ac3 0x2n cambia la duracion de las notas que vienen
+C 0x7aca el nibble bajo es la duracion
+C 0x7ad1 B se queda el byte por si no era una orden
+C 0x7ad4 0x1n pone el periodo del ruido
+C 0x7ad9 los cinco bits de abajo son el periodo del ruido
+C 0x7adc en el canal C el periodo va tal cual
+C 0x7ae2 bit 4 del byte siguiente: si esta puesto, el periodo no se toca
+C 0x7ae8 y si no, se le restan 16
+C 0x7aeb el dec hl devuelve el puntero al byte de la orden
+C 0x7aec registro 6 del PSG: el periodo del ruido
+C 0x7af1 registro 13: el sobre, en modo 15
+C 0x7af8 D a 0 apaga la mezcla de este canal
+C 0x7afe bit 6 del codigo
+C 0x7b05 el canal C se salta el atajo
+C 0x7b0a los demas se quedan con la duracion y no tocan el periodo
+C 0x7b10 el nibble alto de la nota es el volumen...
+C 0x7b13 ...y el bajo, junto con el byte siguiente, el periodo de 12 bits
+C 0x7b17 el puntero se guarda ya avanzado
+C 0x7b1b manda el periodo al PSG
+C 0x7b1f las cuatro rotaciones bajan el volumen a los bits de abajo
+C 0x7b23 H lleva el volumen
+C 0x7b24 byte +0: la cuenta vuelve a la duracion de +1
+C 0x7b2a byte +8: dos pasos hasta que el volumen empiece a bajar
+C 0x7b30 byte +9: sin vueltas pendientes
+C 0x7b34 y byte +11: sin afinado
+C 0x7b37 D a 1 apaga este canal en la mezcla
+C 0x7b3d byte +2 a cero: el canal queda libre
+C 0x7b43 byte +0: lo que le queda a la nota
+C 0x7b46 acabada, a por la orden siguiente
+C 0x7b49 byte +8: cada dos pasos baja un punto de volumen
+C 0x7b4d byte +7: el volumen que suena ahora
+C 0x7b51 llegado a cero ya no baja mas
+C 0x7b56 de C (1, 3 o 5) saca el registro de volumen: 8, 9 o 10
+C 0x7b5e la orden larga: el nibble alto manda
+C 0x7b61 0xDn es el tempo
+C 0x7b68 byte +10: el tempo
+C 0x7b6d 0xFn es el volumen base
+C 0x7b73 byte +6: el volumen base
+C 0x7b78 0xEn es la octava
+C 0x7b7e de 0xE8 en adelante no es octava, es el bit de afinado
+C 0x7b82 byte +11: el afinado
+C 0x7b88 byte +5: la octava
+C 0x7b8d el nibble bajo dice cuantos tempos dura la nota
+C 0x7b90 con el nibble a cero dura un solo tempo
+C 0x7b95 y si no, se suma el tempo tantas veces como diga
+C 0x7b9a byte +1: la duracion que queda fijada
+C 0x7b9e el puntero se guarda ya en el byte siguiente
+C 0x7ba1 el nibble alto de la nota es el semitono
+C 0x7ba8 el semitono 0x0C es un silencio: volumen cero
+C 0x7bac y los demas arrancan con el volumen base
+C 0x7baf byte +7: el volumen de arranque
+C 0x7bb6 los doce semitonos de 0x7BE3
+C 0x7bbf byte +5: la octava
+C 0x7bc6 doblar el periodo es bajar una octava
+C 0x7bc9 byte +11: el afinado sube el periodo en uno
+C 0x7bd0 registro 1, 3 o 5: la parte alta del periodo
+C 0x7bd5 y el de al lado, la parte baja
+C 0x7bdb bytes +3 y +4: por donde se ha quedado el guion
+D 0x7BE3 0x7BEF tabla_de_notas  Los doce semitonos de una octava; las demas octavas salen de doblar
+F 0x7BE3 12
+D 0x7BEF 0x7C2D tabla_de_sonidos  Un puntero por codigo de sonido (base 0x7BED, codigos del 1 al 31); los sonidos de varios canales ocupan huecos seguidos
+F 0x7BEF w8
+D 0x7C2D 0x7FFC guiones_de_sonido  Los guiones de los 31 sonidos y melodias, uno por canal
+D 0x7FFC 0x8000 relleno  Cuatro bytes 0xFF: lo unico que sobra en los 16 KB
+F 0x7FFC 4
+
+# --------------------------------------------------------------------------
+# ETIQUETAS DE DENTRO DE LAS RUTINAS
+# Van aparte para no romper la lectura de arriba, pero cada una sale de leer
+# el codigo que la usa.
+
+L 0x405d INT_SALIDA  Fin de la interrupcion: acusa recibo y devuelve el control
+L 0x40bc DESPACHA_ESTADO  Lee 0xE000/0xE001 y salta al manejador que toque
+L 0x40c6 LLAMA_A_LA_TABLA  El CALL que lleva la tabla de estados pegada detras
+L 0x40d9 ESTADO_0  Cortinilla de entrada del titulo, un anillo cada dos fotogramas
+L 0x40ed ESTADO_0_SUB_1  Espera 256 fotogramas y se lleva el letrero VIDEO CARTRIDGE
+L 0x40ff ESTADO_0_SUB_2  Carga el rotulo del titulo
+L 0x4108 ESTADO_0_SUB_3  Rearma el VDP, el sonido y la cortinilla
+L 0x4116 ESTADO_1  Cuenta atras a secas
+L 0x411d ESTADO_2  Un paso de la fase de la demostracion
+L 0x4127 A_FIN_DE_PARTIDA  Deja el estado en 0: se acabo la demostracion o la partida
+L 0x412b ESTADO_2_SUB_1  Monta la escena de la demostracion y espera 24 fotogramas
+L 0x413b ESTADO_3  Pide la musica de arranque, prepara la partida y pasa al 4
+L 0x4146 VUELVE_AL_TITULO  Borra la pantalla, carga el titulo y sube el subestado
+L 0x414f ESTADO_4  Espera, coloca el avion y marca la fase en marcha
+L 0x4160 ESPERA_Y_SUBE_ESTADO  Deja A en 0xE004 y sube el estado
+L 0x4163 SUBE_ESTADO  Suma uno a 0xE000 y pone el subestado a cero
+L 0x416c ESTADO_4_SUB_1  Quita una vida, repinta el panel y espera
+L 0x417b ESTADO_5  Un paso de la fase de la partida hasta que la fase acaba
+L 0x418f ESTADO_6  Con vidas vuelve al 4; sin vidas, GAME OVER
+L 0x4197 FIJA_ESTADO  Pone A como estado, espera 24 y vuelve al subestado cero
+L 0x41a1 FIN_DE_PARTIDA  Apaga los sprites, escribe GAME  OVER y va al estado 6
+L 0x41bb ESTADO_7  Con el disparo vuelve al titulo y arranca otra partida
+L 0x41d8 ESTADO_7_ESPERA  Sin disparo, espera a que acabe el sonido
+L 0x421f ESCENA_A_CERO  El contador de demostraciones da la vuelta despues del 6
+L 0x4225 GUARDA_TITULO  Deja en 0xE1B8 la fila por la que arranca la demostracion
+L 0x4234 RELLENA_FICHAS  Rellena BC fichas de sprite con 0xE3 y ajusta el sonido
+L 0x4276 MIRA_VIDA_EXTRA  Compara los puntos con el liston de 0xE052
+L 0x4285 DA_VIDA_EXTRA  Sube el liston, suma una vida y repinta
+L 0x4296 MIRA_RECORD  Compara los puntos con el record
+L 0x42a6 NUEVO_RECORD  Copia los puntos al record
+L 0x42d0 PINTA_EL_RECORD  Las seis cifras del record, en la fila 2 del panel
+L 0x42d9 PINTA_LOS_PUNTOS  Las seis cifras de los puntos, en la fila 1 del panel
+L 0x42f0 PINTA_DOS_CIFRAS  Las dos cifras BCD de un byte, del alto al bajo
+L 0x4310 PINTA_UNA_VIDA  Un avioncito: elige su celda de la tabla de nombres
+L 0x431e VIDAS_SEGUNDA_FILA  Los avioncitos del cuarto al sexto van una fila mas abajo
+L 0x432a DIBUJA_O_BORRA  Con E a cero pinta ceros: asi se borra el avioncito
+L 0x4341 PINTA_CELDA  Escribe (A y E) en la celda HL y pasa a la siguiente
+L 0x4348 CARGA_TITULO_ENTERO  Los graficos del titulo y su rotulo
+L 0x43a3 DESC_VRAM_PASO  Lee el siguiente byte de mando del guion
+L 0x43b1 DESC_VRAM_COPIA  Copia B bytes tal cual al puerto del VDP
+L 0x43b9 DESC_VRAM_REPITE  Coge el byte que hay que repetir
+L 0x43bb DESC_VRAM_REPITE_BUCLE  Lo manda B veces, con un nop de respiro
+L 0x43da PINTA_GUION_BLOQUE  Coge la direccion de VRAM del bloque que empieza
+L 0x43e3 PINTA_GUION_PASO  Un byte del guion: 0xFF acaba, 0xFE cambia de bloque
+L 0x43f9 RELLENA_TERCIO  Un tercio, y suma 0x800 para el siguiente
+L 0x440a DESC_TERCIO  Descomprime un tercio, y suma 0x800 para el siguiente
+L 0x4433 MANDA_REGISTRO  Escribe un registro del VDP y pasa al siguiente
+L 0x444c LEE_MANDO_CON_E  Entrada de 0x444A con el registro 15 ya elegido en E
+L 0x44aa PASO_DEL_DEMO  Coge el mando falso que toca y le anade el disparo
+L 0x44bb FIN_PASO_DEMO  Con 0xFF el guion del demo vuelve al principio
+L 0x44ec EMPIEZA_PARTIDA  Pone el subestado a uno y vuelve al titulo por 0x4146
+L 0x4529 ANILLO_CORTINILLA  Pinta B celdas y baja una fila
+L 0x452a ANILLO_BUCLE  Cada celda del anillo lleva el patron siguiente
+L 0x4540 FOTOGRAMA  Todo lo que pasa en un barrido de la partida
+L 0x459a FOTOGRAMA_GIGANTE  Los sprites y los choques del enemigo grande
+L 0x45a0 FOTOGRAMA_FIN  Los caracteres del gigante y el reparto de oleadas
+L 0x45fe GUARDA_GIGANTE  Deja el episodio del gigante como estaba
+L 0x4607 BORRA_EXPLOSIONES  Deja a cero las seis explosiones y espera 0x60
+L 0x4639 MUERTE_COLOR  Elige el patron de la explosion segun la cuenta atras
+L 0x463f MUERTE_FICHA  Deja las dos fichas de sprite de la explosion
+L 0x4651 MUERTE_FIN  Cuando no queda ninguna explosion, la fase para
+L 0x4659 SUMA_EXPLOSIONES  Junta los seis contadores para ver si queda alguna
+L 0x4679 MANDO_ABAJO  Bit 1 del mando: baja una fila
+L 0x467d MANDO_IZQUIERDA  Bit 2 del mando: una columna a la izquierda
+L 0x4681 MANDO_DERECHA  Bit 3 del mando: una columna a la derecha
+L 0x4685 TOPE_COLUMNA  H es la columna; fuera de 0x0A-0xAD se queda como estaba
+L 0x468f TOPE_FILA  L es la fila; fuera de 0x40-0xAF se queda como estaba
+L 0x4699 GUARDA_AVION  Deja la posicion nueva en 0xE181/82
+L 0x46c9 BUSCA_BALA  Busca hueco entre las tres balas
+L 0x46cc BUSCA_BALA_PASO  Una bala esta libre cuando su fila vale 0xE0
+L 0x46d8 LANZA_BALA  Copia la posicion del avion a la bala y hace sonar el disparo
+L 0x46ea BALA_COLOR  Patron y color de la bala
+L 0x46f8 MUEVE_UNA_BALA  Sube seis pixeles; al pasarse, la apaga
+L 0x4703 GUARDA_BALA  Deja la fila nueva de la bala
+L 0x4704 SIGUIENTE_BALA  Salta a la ficha de la bala siguiente
+L 0x4759 CUENTA_ATRAS_ENEMIGO  Cada 0x80 fotogramas cambia el tipo que sale
+L 0x476e PONE_TIPO  Deja A como tipo de enemigo y salta a montarlo
+L 0x479f LEE_SUBTIPO  Del tipo de enemigo saca su rutina de objeto y su fotograma de partida
+L 0x47c6 BUSCA_HUECO  Busca hueco libre entre los siete, de 0xE260 hacia abajo
+L 0x47ce OCUPA_HUECO  Escribe el tipo, la rutina de objeto y el estado en el hueco
+L 0x47f1 ENEMIGO_TIPO_5  El tipo 5 lleva en el byte +2 el premio que soltara al morir
+L 0x4804 ENEMIGO_PREMIO  Con la cuenta en 6 el premio es la mejora del disparo
+L 0x4815 GUARDA_PREMIO  Deja el premio elegido en el hueco
+L 0x4817 SIGUE_MONTANDO  Columna de salida, velocidad y patron
+L 0x4855 GUARDA_VELOCIDAD  Deja la velocidad de 16 bits en el hueco
+L 0x4869 ENEMIGO_FILA  El tipo 12 entra por 0xE0 y los demas por 0xF0
+L 0x4874 GUARDA_FILA  Deja la fila de entrada
+L 0x4889 COLA_DEL_HUECO  Copia los cuatro bytes de cola de la plantilla
+L 0x4896 COPIA_PLANTILLA  Los cuatro bytes de 0x4945, indexados por el tipo
+L 0x48c2 ENEMIGO_EN_GIGANTE  Con el gigante en pantalla, patrones fijos 0x1C y 0x5C
+L 0x48c8 SALTO_A_COLA  Los dos bytes del jr que son tambien la base de 0x48CA
+L 0x4995 FIN_MARCA_MUERTO  Devuelve HL y sale
+L 0x4997 QUITA_OBJETO  Apaga el hueco y pasa al siguiente
+L 0x49a1 OBJETO_PASO  Suma la velocidad de 16 bits a la posicion del objeto
+L 0x49c7 OBJETO_GUARDA_FILA  La fila cabe: guarda y sigue con la columna
+L 0x49d6 OBJETO_SIGUIENTE  Salta al hueco siguiente, 16 bytes mas alla
+L 0x49ea OBJETO_A_SPRITES  Vuelca cada hueco a sus dos fichas de sprite
+L 0x4a2d OBJETO_A_SPRITES_FIN  Avanza al hueco y a la ficha siguientes
+L 0x4a41 TIPO_13_SIN_PARTE  La primera pieza no esta: salta a la segunda
+L 0x4a4b TIPO_13_A_SPRITES  Volcado del tipo 0x13, que lleva dos piezas sueltas
+L 0x4a65 TIPO_13_SEGUNDA  La segunda pieza del tipo 0x13
+L 0x4a7c TIPO_10_A_SPRITES  Volcado de la rutina 0x10, que ademas cuelga un disparo fijo
+L 0x4acd RASTRO_COLUMNA  Un vaiven de 0x40 pixeles para la columna del rastro
+L 0x4ad8 TIPO_6_A_SPRITES  Volcado del tipo 6, con la segunda ficha 16 pixeles a la derecha
+L 0x4b86 COLOR_DIECISEIS  Dieciseis pares de color, ocho bytes cada uno
+L 0x4b89 COLOR_UN_CARACTER  Ocho bytes con el mismo par de color
+L 0x4b8b COLOR_UN_BYTE  Un byte de la tabla de color
+L 0x4ec3 APAGA_UNA_FICHA  Pone 0xE0 en un byte de la copia de atributos
+L 0x4eeb TANDA_DE_SPRITES  Coge cuantas fichas y de donde salen
+L 0x4ef1 TANDA_BUCLE  Vuelca los bytes de la tanda al puerto del VDP
+L 0x5339 HUECO_SIGUIENTE  Guarda el hueco en 0xE310 y llama a su rutina
+L 0x5345 HUECO_MAS_16  Salta al hueco siguiente
+L 0x5389 OBJETO_TIPO_0  Deriva hacia la derecha, mas fuerte cuanto mas lejos esta el avion
+L 0x5390 OBJETO_TIPO_1  Lo mismo, pero hacia la izquierda
+L 0x5395 CUENTA_Y_PERSIGUE  No empieza a derivar hasta el fotograma 0x10
+L 0x53a8 ELIGE_VELOCIDAD  De la distancia saca el indice de la tabla de velocidad
+L 0x53b8 SUMA_VELOCIDAD  Suma la velocidad a la posicion de 16 bits, con tope
+L 0x53e2 OBJETO_TIPO_2  Deriva despacio y, con el avion a tiro, se lanza en picado
+L 0x53f2 TIPO_2_DECIDE  Cerca del avion se transforma; lejos, sigue derivando
+L 0x540a TIPO_2_SE_TRANSFORMA  Se vuelve del tipo 0x12 con patrones 0x10 y 0x14
+L 0x5423 OBJETO_TIPO_4  Acelera hacia la izquierda y en el paso 0x40 da la vuelta
+L 0x5429 CUENTA_Y_CAE  Cuenta pasos y elige la aceleracion lateral que toca
+L 0x5437 DA_LA_VUELTA  Invierte el signo de la velocidad
+L 0x5441 OBJETO_TIPO_3  El mismo, arrancando hacia la derecha
+L 0x5461 OBJETO_TIPO_5  Da vueltas empezando por el indice 0
+L 0x5465 OBJETO_TIPO_6  Da vueltas empezando por el indice 6
+L 0x5467 GIRA  Recorre la tabla de giro, mas deprisa si esta el gigante
+L 0x5474 GIRA_CUENTA  Un paso de giro cada 16 fotogramas
+L 0x547d GIRA_INDICE  Del paso saca el indice de la tabla de giro
+L 0x548d GIRA_APLICA  Suma los dos incrementos de 16 bits a la posicion
+L 0x549b GIRA_SUMA  Un incremento de 16 bits
+L 0x54a7 PATRON_GIRA  Elige el patron y suena
+L 0x54b2 PATRON_ANIMADO  Patron que cambia cada dos fotogramas, y su pareja
+L 0x5504 OBJETO_NADA  Los tipos 7 y 18 no hacen nada
+L 0x5505 OBJETO_TIPO_8  El disparo grande: rebota en los bordes de la pantalla
+L 0x5516 TIPO_8_BORDE_BAJO  Por abajo se manda hacia arriba
+L 0x551d TIPO_8_GUARDA  Deja la velocidad nueva
+L 0x5535 TIPO_8_PATRON  Los patrones salen de 0x5C58 o de 0x6460 segun el fotograma
+L 0x5565 TIPO_8_PIEZA_A  La primera pieza del disparo
+L 0x556d TIPO_8_PIEZA_B  La segunda pieza
+L 0x5577 TIPO_8_CUENTA  Al acabarse la cuenta, apaga las piezas
+L 0x5580 TIPO_8_APAGA_A  Apaga la primera pieza
+L 0x5588 TIPO_8_FIN  Sin piezas vivas, el hueco se libera
+L 0x5594 OBJETO_TIPO_10  Solo suena
+L 0x5599 OBJETO_TIPO_12  Se mueve a un lado u otro segun donde este
+L 0x55a3 TIPO_12_DERECHA  Pasado 0x60 tira a la derecha
+L 0x55b0 TIPO_12_IZQUIERDA  Antes de 0x18 tira a la izquierda
+L 0x55b8 TIPO_12_GUARDA  Deja el sentido y el patron
+L 0x55c7 OBJETO_TIPO_14  Alterna cuatro parejas de patron cada cuatro fotogramas
+L 0x55ec TIPO_14_GUARDA  Reparte la pareja entre las dos fichas
+L 0x5604 SUENA_SI_ES_TRES  Con B igual a tres, pide el sonido 0x85
+L 0x5612 OBJETO_TIPO_16  Las dos piezas de una explosion en marcha
+L 0x5637 TIPO_16_PIEZA_A  Patron y color de la primera pieza
+L 0x5640 TIPO_16_PIEZA_B  Patron y color de la segunda
+L 0x564b TIPO_16_CUENTA  Al llegar a cero se apagan las piezas
+L 0x5655 TIPO_16_APAGA_A  Apaga la primera pieza
+L 0x565d TIPO_16_FIN  Sin piezas vivas, el hueco se apaga del todo
+L 0x5669 OBJETO_TIPO_17  A los 0x40 pasos se convierte en el tipo 0x13
+L 0x5685 TIPO_17_MONTA  Rellena el hueco del tipo 0x13 apuntando al avion
+L 0x56b1 OBJETO_TIPO_19  Las dos piezas del bicho que persigue al avion
+L 0x56d4 PIEZA_QUE_PERSIGUE  Mueve la primera pieza hacia la columna del avion
+L 0x56e8 PIEZA_SENTIDO  Diez pixeles hacia el avion, en el sentido que toque
+L 0x56f7 PIEZA_SUMA  Suma el desvio a la posicion de 16 bits
+L 0x570c PIEZA_FILA  Baja la fila y elige el patron segun donde este
+L 0x571f PIEZA_GUARDA_PATRON  Deja el patron de la pieza
+L 0x5741 PIEZA_MUERE  La pieza esta explotando: patrones de explosion
+L 0x574a PIEZA_EXPLOSION  Patron y color de la explosion
+L 0x5754 PIEZA_COLOR  Color de la pieza que explota
+L 0x5755 PIEZA_FIN  Si la pieza ha muerto, se apaga su ficha
+L 0x576e SEGUNDA_PIEZA  La segunda pieza del bicho, que sigue a la primera
+L 0x5789 SEGUNDA_MUEVE  Un pixel hacia la columna del avion, uno de cada dos
+L 0x579a SEGUNDA_MIRA_MUERTE  Si esta explotando, patrones de explosion
+L 0x57b9 SEGUNDA_EXPLOSION  Patron de explosion segun la cuenta
+L 0x57c2 SEGUNDA_COLOR  Patron y color de la explosion
+L 0x57c7 SEGUNDA_FIN  Al morir, apaga su ficha de sprite
+L 0x57e1 OBJETO_TIPO_20  La explosion del bicho grande, que se apaga sola
+L 0x5805 EXPLOSION_PATRON  Patrones de la explosion segun la cuenta
+L 0x5812 EXPLOSION_GUARDA  Deja los dos patrones y sus colores
+L 0x5869 VUELTA_A_LA_FASE  La fase vuelve a empezar y sube la dificultad
+L 0x586f GUARDA_POSICION  Deja la posicion y el desplazamiento fino
+L 0x587c GUARDA_FINO  Deja el desplazamiento fino, de 0 a 14
+L 0x5881 DIVIDE_ENTRE_OCHO  De la posicion saca el indice del mapa
+L 0x589b COPIA_CODIGOS  Los cuatro codigos de tira, de 0xE1BE hacia abajo
+L 0x58b5 FILA_NUEVA  Prepara el VDP para escribir esta fila
+L 0x58b8 TIRA_PASO  Un byte de mando del guion de la tira
+L 0x58c4 TIRA_COPIA  Copia B celdas tal cual
+L 0x58cc TIRA_MIRA_FIN  Un cero acaba la fila
+L 0x58d0 TIRA_REPITE  Repite B veces la misma celda
+L 0x58d7 SUBE_UNA_FILA  Resta 0x20 a la direccion de VRAM: una fila mas arriba
+L 0x58e4 CAMBIA_DE_TIRA  Coge la siguiente tira del mapa, y eso cierra la fila
+L 0x65e0 PASO_DISPAROS_MUEVE  Mueve los nueve disparos enemigos
+L 0x65e5 DISPARO_PASO  Un disparo: suma su velocidad de 16 bits
+L 0x65f7 DISPARO_TOPES  Los topes cambian si el disparo es del tipo 2
+L 0x6620 DISPARO_SIGUIENTE  Salta al disparo siguiente
+L 0x662a APAGA_DISPARO  Vacia el disparo y apaga su ficha de sprite
+L 0x6649 DISPARO_A_SPRITES  Vuelca un disparo a su ficha
+L 0x6663 DISPARO_AVANZA  Suma A a L para pasar al disparo siguiente
+L 0x6668 DISPARO_VACIO  Salta cuatro bytes de ficha y pasa al siguiente
+L 0x6670 REPARTE_CADA_60  Cada 60 fotogramas reparte un disparo mas
+L 0x6688 SALTO_AL_INC_BC  El inc bc en que cae el jr c de 0x6684
+L 0x668f REPARTE_HUECO  Mira si este hueco puede soltar el disparo
+L 0x66a3 SUELTA_DISPARO  Monta un disparo enemigo desde este hueco
+L 0x66af DISPARO_DESDE  Coge la posicion del hueco que dispara
+L 0x66dc REPONE_CUENTA  Repone la cuenta atras del hueco
+L 0x66ef CUENTA_POR_DIFICULTAD  La cuenta baja con la dificultad de 0xE1D3
+L 0x66f8 BUSCA_EN_LA_TANDA  Busca el tipo del hueco entre las dos tandas
+L 0x66fe TANDA_PASO  Compara con la tanda y salta seis bytes a la siguiente
+L 0x6730 GUARDA_DE_LA_LISTA  Deja el enemigo que toca en el hueco
+L 0x6733 RECORRE_GIGANTE  Recorre las piezas del gigante buscando disparo
+L 0x673d PIEZAS_DEL_GIGANTE  Cuatro piezas o dos, segun cual sea el gigante
+L 0x6745 RECORRE_HUECOS_DISPARO  Recorre los siete huecos buscando quien dispara
+L 0x674d HUECO_DISPARA  Mira la cuenta atras de disparo de este hueco
+L 0x6767 CUENTA_TIPO_ALTO  Los tipos de 0x12 en adelante llevan la cuenta en mas uno
+L 0x676d MIRA_LA_CUENTA  Baja la cuenta atras; al llegar a cero, dispara
+L 0x6777 HUECO_DISPARO_SIGUIENTE  Salta al hueco siguiente
+L 0x677e PREPARA_DISPARO  Calcula el octante del avion respecto del que dispara
+L 0x67a0 DISTANCIA_FILA  De la diferencia de filas saca tres bits
+L 0x67b5 DISTANCIA_COLUMNA  De la diferencia de columnas, otros tres
+L 0x67ce BUSCA_DISPARO_LIBRE  Busca un disparo libre entre los nueve de 0xE270
+L 0x67fb SALTO_AL_LD_FF  El byte 0x3E del ld a,0xFF, al que apunta el jr nc de 0x67F8
+L 0x67fc SUMA_DESVIO  Suma el desvio de la punteria a la direccion elegida
+L 0x6802 MONTA_DISPARO  Coge la direccion de la tabla de senos y arma el disparo
+L 0x6821 GUARDA_DISPARO  Rellena el hueco de disparo con posicion y velocidad
+L 0x6852 SUENA_DISPARO  Los tipos 5 y 9 disparan con sonido propio
+L 0x6857 NIEGA_DE  DE pasa a valer menos DE, para disparar hacia el otro lado
+L 0x685f ORIGEN_POR_TABLA  Origen del disparo leido de la plantilla del hueco
+L 0x6866 ORIGEN_DEL_DISPARO  De donde sale el disparo, segun el tipo del hueco
+L 0x6882 ORIGEN_NORMAL  El caso general: la fila y la columna del hueco
+L 0x688c GUARDA_ORIGEN  Deja el origen en 0xE312
+L 0x6891 ORIGEN_TIPO_9  El tipo 9 solo dispara con el patron 0x74
+L 0x689b ORIGEN_TIPO_10  El tipo 10 dispara desde una pieza o desde la otra
+L 0x68ae ORIGEN_MAS_64  La segunda pieza esta 0x40 pixeles mas abajo
+L 0x68b7 ORIGEN_AL_AZAR  Con las dos piezas vivas, elige una con el registro R
+L 0x68be ORIGEN_TIPO_11  El tipo 11 dispara desde una de las dos piezas del 0x13
+L 0x68dc ORIGEN_TIPO_11_B  La otra pieza del tipo 0x13
+L 0x696a PREPARA_CAJA_AVION  Deja en 0xE1C2 la caja del avion y su posicion
+L 0x6983 TOCADO_EL_GIGANTE  Una pieza del gigante encajada: puntos y sonido
+L 0x6996 MIRA_SI_ERA_LA_ULTIMA  Solo la ultima pieza da los mil puntos
+L 0x69a7 SALTO_AL_INC_BC_2  El inc bc en que cae el jr nz de 0x69A1
+L 0x69c9 APAGA_BALA_Y_PUNTUA  Apaga la bala y cobra la pieza del gigante
+L 0x69ce CHOQUES_BALAS_GIGANTE  Las tres balas contra las piezas del gigante
+L 0x69d7 BALA_CONTRA_GIGANTE  Una bala, si esta viva
+L 0x69ec CAJA_DE_LA_BALA  La caja de la bala depende de su patron
+L 0x69f3 BALA_SIGUIENTE  Pasa a la bala siguiente
+L 0x6a00 BALA_CONTRA_PIEZAS  Prueba la bala contra las cuatro (o dos) piezas
+L 0x6a0e PIEZA_PASO  Una pieza del gigante
+L 0x6a28 PIEZA_SIGUIENTE  Ocho bytes mas alla esta la pieza siguiente
+L 0x6a34 CHOQUES_AVION_DISPAROS  El avion contra los nueve disparos enemigos
+L 0x6a3e DISPARO_CONTRA_AVION  Un disparo enemigo contra el avion
+L 0x6a53 DISPARO_CONTRA_SIGUIENTE  Pasa al disparo siguiente
+L 0x6a5e AVION_TOCADO_POR_DISPARO  El disparo acierta: se apaga y el avion muere
+L 0x6a6d APAGA_EL_DISPARO  Quita el disparo que ha acertado
+L 0x6a70 MATA_AL_AVION  Arranca la explosion del avion, o suma un aviso
+L 0x6a8e AVISO_SIN_MUERTE  El tipo 0x11 solo sube 0xE1D5 hasta dos
+L 0x6a9c CHOQUES_AVION_OBJETOS  El avion contra los siete objetos
+L 0x6aa6 OBJETO_CONTRA_AVION  Un objeto contra el avion, con su caja de choque
+L 0x6ad8 OBJETO_CONTRA_SIGUIENTE  Pasa al objeto siguiente
+L 0x6ae5 CHOCA_CON_EL_0X13  El tipo 0x13 tiene dos piezas y se prueban aparte
+L 0x6aee CHOCA_CON_EL_OBJETO  El objeto ha encajado el golpe
+L 0x6af1 MIRA_SI_MURIO  Si el objeto ha muerto, el avion tambien
+L 0x6afc CHOQUES_BALAS_OBJETOS  Las tres balas contra los siete objetos
+L 0x6b05 BALA_CONTRA_OBJETOS  Una bala, si esta viva
+L 0x6b1a CAJA_DE_LA_BALA_2  La caja de la bala depende de su patron
+L 0x6b21 BALA_SIGUIENTE_2  Pasa a la bala siguiente
+L 0x6b2e PRUEBA_LOS_SIETE  Recorre los siete huecos con esta bala
+L 0x6b73 CHOQUE_SIGUIENTE  Salta al hueco siguiente
+L 0x6b80 CHOQUE_CON_EL_0X13  El tipo 0x13 se prueba pieza a pieza
+L 0x6b85 CHOQUE_DOS_PIEZAS  Las dos piezas del tipo 0x13 contra la bala
+L 0x6b9e CHOQUE_PIEZA_B  La segunda pieza del tipo 0x13
+L 0x6bd5 OBJETO_ENCAJA  Reparte el golpe segun el tipo del objeto
+L 0x6bf9 OBJETO_A_EXPLOSION  El objeto pasa al tipo 0x14: explota
+L 0x6bfb EXPLOTA  Cuenta de explosion, sonido y puntos
+L 0x6c1a SONIDO_DE_EXPLOSION  El sonido depende del tipo
+L 0x6c1d COBRA_EL_OBJETO  Lo que valia, de la tabla de 0x6D62
+L 0x6c2d TIPO_5_CUENTA  Con el +2 en 2 el premio es la mejora del disparo
+L 0x6c31 TIPO_5_GUARDA  Deja en +2 cual de las dos explosiones toca
+L 0x6c32 MIRA_SI_PUNTUA  Solo los tipos por debajo de 0x12 dan puntos
+L 0x6c40 MARCA_MUERTE  Deja 0xE1CE a uno: ha muerto algo
+L 0x6c45 APAGA_LA_BALA  Apaga la bala que ha acertado
+L 0x6c52 SOLO_SUENA  El objeto no muere: solo suena el golpe
+L 0x6c59 GOLPE_AL_TIPO_9  El tipo 9 solo muere con el patron 0x74
+L 0x6c68 GOLPE_AL_TIPO_6  El tipo 6 tiene dos mitades que se rompen aparte
+L 0x6c6e PRUEBA_DOS_MITADES  Prueba las dos mitades con sus cajas
+L 0x6c8a MITAD_DE_ABAJO  La mitad de abajo, desplazada
+L 0x6c9f MITAD_SOLA  Con una sola mitad viva, se prueba esa
+L 0x6ca3 ROMPE_MITAD_A  Marca la mitad de arriba como rota
+L 0x6caf GOLPE_AL_TIPO_10  El tipo 10 se rompe igual, pero borra su rastro
+L 0x6cd6 GOLPE_AL_TIPO_17  El tipo 0x11 baja a estado dos y explota
+L 0x6ce0 GOLPE_AL_TIPO_11  El tipo 0x13 baja su segunda pieza a estado dos
+L 0x6cec GOLPE_CON_AVISO  Los tipos 0x0D a 0x0F avisan antes de romperse
+L 0x6d45 VACIA_HUECO  Pone el hueco a cero y apaga sus dos fichas
+L 0x6d59 APAGA_DOS_FICHAS  Deja 0xC3 en las dos fichas de sprite del hueco
+L 0x6da5 CARGA_GIGANTE_PASO  Elige el juego de caracteres del gigante que toca
+L 0x6db4 CARGA_PATRONES_GIGANTE  Los patrones a 0x2580 en los tres tercios
+L 0x6dc4 CARGA_COLORES_GIGANTE  Y sus colores a 0x0580
+L 0x752e COLOCA_OLEADA  Deja la oleada del tramo en 0xE320 y la copia a 0xE321
+L 0x7564 COPIA_TANDA  Copia una tanda de tres bytes, intercalando ceros
+L 0x7637 TANDA_CUENTA  Baja la cuenta atras de esta tanda
+L 0x763f TANDA_SIGUIENTE  Cinco bytes mas alla esta la otra tanda
+L 0x7647 SACA_DE_LA_TANDA  Coge el enemigo siguiente de la secuencia de esta tanda
+L 0x766c GUARDA_ENEMIGO  Deja el enemigo elegido y su dificultad
+L 0x7788 MIRA_EL_SEGUNDO  La posicion 0xE7 del mapa saca el gigante numero 2
+L 0x778e ARRANCA_GIGANTE  Marca el episodio, el gigante y sus contadores
+L 0x77a4 PREPARA_PIEZAS  Cuantas piezas y cuanto aguantan
+L 0x77bc VIDA_DE_LAS_PIEZAS  Lo que aguanta cada pieza baja con la dificultad
+L 0x77c4 REPARTE_VIDA  Deja la vida de las piezas en 0xE144 y 0xE1B1
+L 0x77f3 GIGANTE_EPISODIO_1  Cuenta ocho pasos y pasa al episodio 2
+L 0x77fd GIGANTE_EPISODIO_2  Mantiene sonando la musica del gigante
+L 0x780b GIGANTE_EPISODIO_3  Cuenta 0x3F pasos y cierra el episodio
+L 0x7819 GIGANTE_SUENA_UNA_VEZ  A los 0x14 pasos suena una sola vez
+L 0x7847 COLOCA_PIEZAS  Reparte las piezas por la pantalla segun el fotograma
+L 0x7851 PIEZA_COLOCA  Coloca una pieza, o la manda fuera si se sale
+L 0x7862 PIEZA_FUERA  La pieza se sale: fila 0xC3, o sea apagada
+L 0x7864 PIEZA_GUARDA  Deja la fila y la columna de la pieza
+L 0x7880 COPIA_UNA_PIEZA  Cuatro bytes de la pieza a los atributos de sprite
+L 0x788f MARCA_EXPLOSION  Enciende la explosion que corresponde a esta pieza
+L 0x78a0 PASO_EXPLOSIONES  Un paso de las cuatro explosiones del gigante
+L 0x78ac EXPLOSION_PASO  Baja la cuenta y elige el patron de la explosion
+L 0x78bc EXPLOSION_PATRON_PIEZA  Deja el patron y el color de la explosion
+L 0x78c3 EXPLOSION_SIGUIENTE  Pasa a la explosion siguiente
+L 0x78c9 PIEZA_VUELVE  La explosion se acaba: la pieza vuelve a su patron
+L 0x78e4 GUARDA_PATRON_PIEZA  Deja el color de la pieza y su patron fijo 0xBC
+L 0x78ed PIEZA_TIPO  El tipo de la ultima pieza depende de cual sea el gigante
+L 0x78f7 PIEZA_MIRA_TIPO  Compara el tipo de la pieza con el ultimo
+L 0x7909 RECORRE_PIEZAS  Da su color a cada pieza viva
+L 0x7913 PIEZA_IX  Apunta IX a la primera pieza
+L 0x7917 PIEZA_PATRON_PASO  Una pieza, si esta viva
+L 0x7920 PIEZA_IX_SIGUIENTE  Ocho bytes mas alla esta la pieza siguiente
+L 0x7958 RITMO_AL_REVES  El gigante 1 recorre sus fotogramas al reves
+L 0x7961 ELIGE_GUION_GIGANTE  Elige la lista de guiones segun el gigante
+L 0x796a PINTA_EL_GUION  Coge el guion y lo vuelca en la tabla de nombres
+L 0x7a06 UN_CANAL  Un solo canal para este sonido
+L 0x7a07 REPARTE_CANALES  Compara prioridades y reparte el sonido por los canales
+L 0x7a19 MONTA_CANAL  Deja el codigo y el puntero del guion en un canal
+L 0x7a2f REPITE_O_ACABA  Un 0xFE del guion: repite el bloque o pasa al siguiente
+L 0x7a3c ENCADENA_SONIDO  Encadena el sonido que sigue en el guion
+L 0x7a4c MEZCLA_PSG  Enciende o apaga el tono y el ruido de este canal
+L 0x7a56 MEZCLA_BITS  Coloca los bits de tono y ruido de este canal
+L 0x7a60 MEZCLA_ENCIENDE  Enciende los bits que tocan
+L 0x7a61 MEZCLA_AJUSTA  Ajusta el ruido para que tono y ruido no se pisen
+L 0x7a8c CANAL_PASO  Un paso de un canal, y salta al siguiente
+L 0x7a9c CANAL_ACTIVO  Un canal que suena: baja su cuenta y sigue el guion
+L 0x7aae LEE_ORDEN  Lee la siguiente orden del guion del canal
+L 0x7ad1 ORDEN_RUIDO  0x1n: pone el periodo del ruido y enciende el sobre
+L 0x7aeb ORDEN_RUIDO_ATRAS  Retrocede al byte de la orden
+L 0x7aec ORDEN_RUIDO_MANDA  Manda el periodo del ruido y el sobre al PSG
+L 0x7afe ORDEN_NOTA  La nota y su duracion
+L 0x7b10 NOTA_CON_PERIODO  Nota con el periodo escrito en el guion
+L 0x7b23 GUARDA_VOLUMEN  Deja el volumen y la duracion del canal
+L 0x7b30 CALLA_CANAL  Apaga el canal y su volumen
+L 0x7b43 BAJA_EL_VOLUMEN  El sobre a mano: baja el volumen paso a paso
+L 0x7b56 MANDA_VOLUMEN  Escribe el volumen del canal en el PSG
+L 0x7b5e ORDEN_LARGA  Las ordenes 0xD0, 0xE0 y 0xF0: tempo, sobre y octava
+L 0x7b6d ORDEN_VOLUMEN  0xFn: volumen base del canal
+L 0x7b78 ORDEN_OCTAVA  0xEn: octava, o el bit de afinado si es 0xE8 o mas
+L 0x7b88 ORDEN_OCTAVA_GUARDA  Deja la octava del canal
+L 0x7b8d ORDEN_DURACION  La duracion sale de multiplicar el tempo por el valor
+L 0x7b95 MULTIPLICA_TEMPO  Suma el tempo tantas veces como diga el valor
+L 0x7b9a GUARDA_DURACION  Deja la duracion y sigue con la nota
+L 0x7baf NOTA_GUARDA_VOLUMEN  Deja el volumen de arranque de la nota
+L 0x7bc6 SUBE_OCTAVA  Dobla el periodo por cada octava
+L 0x7bd0 MANDA_PERIODO  Escribe el periodo de 12 bits en los dos registros del PSG
+L 0x7bdb GUARDA_PUNTERO  Deja el puntero del guion en el canal
+L 0x5798 SEGUNDA_APLICA  Suma el pixel a la columna de la segunda pieza

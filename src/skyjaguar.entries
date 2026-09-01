@@ -1,0 +1,83 @@
+# Puntos de entrada de Sky Jaguar (Konami, RC-721). ROM de 16 KB en 0x4000.
+#
+# La BIOS lee la cabecera "AB" y llama a INIT tras inicializar la maquina.
+# Comprobado en el volcado: los bytes 0-9 son 41 42 10 40 00 00 00 00 00 00,
+# o sea que SOLO declara INIT; STATEMENT, DEVICE y TEXT van a cero.
+0x4010   # INIT, declarado en la cabecera del cartucho (bytes 2-3: 10 40)
+
+# --------------------------------------------------------------------------
+# EL GANCHO DE LA INTERRUPCION
+#
+# INIT (0x4010) escribe 0xC3 en H.KEYI (0xFD9A) y 0x4043 en 0xFD9B-0xFD9C, o
+# sea que deja instalado un `jp 0x4043` en el gancho de teclado de la BIOS.
+# Acto seguido hace `ei` y cae en `jr $` (0x4041), un bucle muerto: TODO el
+# juego cuelga de esta rutina, que se ejecuta una vez por interrupcion de
+# barrido.
+0x4043   # gancho H.KEYI, lo instala 0x4018-0x401D con ld hl,0x4043 / ld (0xFD9B),hl
+
+# --------------------------------------------------------------------------
+# LA MAQUINA DE ESTADOS PRINCIPAL
+#
+# 0x40A5 lee la palabra de 0xE000: C es el estado y B el subestado. Con A=C
+# llama al despachador 0x4071, que coge la direccion de retorno (la tabla que
+# va justo detras del CALL, en 0x40C9) y salta por ella. Estos ocho son los
+# destinos de esa tabla.
+0x40D9   # estado 0, destino de la tabla de saltos de 0x40C9
+0x4116   # estado 1, destino de la tabla de saltos de 0x40C9
+0x411D   # estado 2, destino de la tabla de saltos de 0x40C9
+0x413B   # estado 3, destino de la tabla de saltos de 0x40C9
+0x414F   # estado 4, destino de la tabla de saltos de 0x40C9
+0x417B   # estado 5, destino de la tabla de saltos de 0x40C9
+0x418F   # estado 6, destino de la tabla de saltos de 0x40C9
+0x41BB   # estado 7, destino de la tabla de saltos de 0x40C9
+
+# --------------------------------------------------------------------------
+# DIRECCIONES QUE SE METEN EN LA PILA COMO RETORNO
+#
+# 0x40B4-0x40C5: segun el bit 6 de 0xE002 (partida en marcha) mete en HL
+# 0x413A (un `ret` pelado) o 0x44C4, y lo empuja con `push hl` antes de
+# despachar el estado. El manejador vuelve con `ret` A ESA DIRECCION.
+0x44C4   # retorno comun de los estados de la pantalla de titulo, empujado con push hl en 0x40C5
+
+# --------------------------------------------------------------------------
+# LAS RUTINAS DE OBJETO
+#
+# 0x5334 recorre los SIETE huecos de objeto de 0xE200 (16 bytes cada uno) y por
+# cada uno con el byte 0 distinto de cero llama a 0x534F, que coge el byte 1
+# (el tipo), lo dobla, lo suma a 0x535F y salta a la direccion que lee con
+# `push bc / ret`. Estos son los destinos de esa tabla de 21 entradas.
+0x5389   # tipo 0, destino de la tabla de rutinas de objeto de 0x535F
+0x5390   # tipo 1, destino de la tabla de rutinas de objeto de 0x535F
+0x53E2   # tipo 2, destino de la tabla de rutinas de objeto de 0x535F
+0x5441   # tipo 3, destino de la tabla de rutinas de objeto de 0x535F
+0x5423   # tipo 4, destino de la tabla de rutinas de objeto de 0x535F
+0x5461   # tipo 5, destino de la tabla de rutinas de objeto de 0x535F
+0x5465   # tipo 6, destino de la tabla de rutinas de objeto de 0x535F
+0x5504   # tipos 7 y 18, destino de la tabla de rutinas de objeto de 0x535F
+0x5505   # tipos 8 y 9, destino de la tabla de rutinas de objeto de 0x535F
+0x5594   # tipos 10 y 11, destino de la tabla de rutinas de objeto de 0x535F
+0x5599   # tipos 12 y 13, destino de la tabla de rutinas de objeto de 0x535F
+0x55C7   # tipos 14 y 15, destino de la tabla de rutinas de objeto de 0x535F
+0x5612   # tipo 16, destino de la tabla de rutinas de objeto de 0x535F
+0x5669   # tipo 17, destino de la tabla de rutinas de objeto de 0x535F
+0x56B1   # tipo 19, destino de la tabla de rutinas de objeto de 0x535F
+0x57E1   # tipo 20, destino de la tabla de rutinas de objeto de 0x535F
+
+# --------------------------------------------------------------------------
+# CODIGO AL QUE NO LLEGA NADIE
+#
+# Buscado en los 16 KB: ni call, ni jp, ni jr, ni la palabra cruda en ninguna
+# tabla (0 apariciones de cada una de estas seis direcciones). Se siembran para
+# que salgan como codigo y se vea lo que son.
+0x407B   # `ld c,(hl) / ld a,(de) / ld (hl),a / ld a,c / ld (de),a / inc hl / inc de / djnz`:
+         # intercambia B bytes entre (HL) y (DE). Nadie la llama.
+0x4085   # de HL = (fila<<8 | columna*8) saca la direccion de la tabla de nombres:
+         # divide entre 8 con seis rotaciones y suma 0x3800. Nadie la llama; el
+         # juego escribe siempre direcciones de VRAM calculadas a mano.
+0x4099   # HL = HL*8 repartido en H:L (`add hl,hl` x3 y recoloca): nadie la llama.
+0x4188   # `ld a,7 / ld (0xE000),a / jr 0x4163`: pondria la maquina de estados en
+         # el estado 7 (el de la cortinilla). Ningun salto entra aqui.
+0x4392   # `ld c,0 / jr 0x438E`: la variante de 0x438E que copiaria a la VRAM con
+         # BC ya en B=0. Nadie la llama.
+0x43CE   # `call 0x0050 (SETRD) / exx / ld a,(0x0007) / ld c,a / exx / ret`: la
+         # gemela de 0x43C2 para LEER de la VRAM. El cartucho nunca lee la VRAM.
