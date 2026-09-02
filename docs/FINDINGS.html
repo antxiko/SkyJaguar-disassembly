@@ -1,6 +1,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Findings — Hyper Rally (Konami, 1985)</title>
+<title>Findings — Sky Jaguar (Konami, 1984)</title>
 <style>
 :root{--tinta:#cfd0d4;--suave:#83868f;--fondo:#000;--panel:#0c0e13;--linea:#23262e;
   --rojo:#ff897d;--cyan:#65dbef;--verde:#3eb849;--oro:#ded087}
@@ -103,4 +103,4 @@ audio{display:block;width:100%;max-width:640px;margin:.75rem 0 1.5rem}
 <p><b>The demo does not always start in the same place.</b> 0xE040 counts the demos and multiplies by 256, but the counter <b>skips 2</b>, so the six demo runs begin at rows 0, 256, 768, 1024, 1280 and 1536.</p>
 <h2 id="the-big-enemy-is-drawn-by-the-background">The big enemy is drawn by the background</h2>
 <p>It appears twice in the stage and comes in two halves. Its <b>body is not sprites</b>: strip types 18 and 19 are the only ones in the map that use characters 0xB0 to 0xEC, and each appears <b>exactly once</b> (map indices 0x4A and 0xEA). On top of it go the sprites at 0xE150, which are the parts you shoot at. 0x7766 starts it three steps before it comes into view, to give its graphics time to load.</p>
-<footer><p><em>Hyper Rally</em> was published by Konami for the MSX; its catalogue number is RC-718 and it is 16 KB. All rights in the game remain with their holders. This is preservation, study and documentation work, and the cartridge image is not distributed.</p></footer></div>
+<footer><p><em>Sky Jaguar</em> was published by Konami for the MSX; its catalogue number is RC-721 and it is 16 KB. All rights in the game remain with their holders. This is preservation, study and documentation work, and the cartridge image is not distributed.</p></footer></div>

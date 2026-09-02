@@ -1,6 +1,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>In the emulator — Hyper Rally (Konami, 1985)</title>
+<title>In the emulator — Sky Jaguar (Konami, 1984)</title>
 <style>
 :root{--tinta:#cfd0d4;--suave:#83868f;--fondo:#000;--panel:#0c0e13;--linea:#23262e;
   --rojo:#ff897d;--cyan:#65dbef;--verde:#3eb849;--oro:#ded087}
@@ -90,4 +90,4 @@ audio{display:block;width:100%;max-width:640px;margin:.75rem 0 1.5rem}
 <h2 id="the-measuring-scripts">The measuring scripts</h2>
 <p><code>tools/</code> holds openMSX TCL scripts meant for checking, not for illustrating: they dump the 16 KB of VRAM and the VDP registers and exit on their own, with a real-time watchdog so a broken script cannot leave the emulator hanging.</p>
 <p>Two things learned the hard way, in case you write your own: in TCL do not nest quotes inside a string (use <code>{VDP regs}</code>), and <b>do not set breakpoints that fire every frame</b> inside drawing routines — they choke the emulator, which then never even gets a game started.</p>
-<footer><p><em>Hyper Rally</em> was published by Konami for the MSX; its catalogue number is RC-718 and it is 16 KB. All rights in the game remain with their holders. This is preservation, study and documentation work, and the cartridge image is not distributed.</p></footer></div>
+<footer><p><em>Sky Jaguar</em> was published by Konami for the MSX; its catalogue number is RC-721 and it is 16 KB. All rights in the game remain with their holders. This is preservation, study and documentation work, and the cartridge image is not distributed.</p></footer></div>

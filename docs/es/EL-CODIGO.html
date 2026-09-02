@@ -1,6 +1,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>El código — Hyper Rally (Konami, 1985)</title>
+<title>El código — Sky Jaguar (Konami, 1984)</title>
 <style>
 :root{--tinta:#cfd0d4;--suave:#83868f;--fondo:#000;--panel:#0c0e13;--linea:#23262e;
   --rojo:#ff897d;--cyan:#65dbef;--verde:#3eb849;--oro:#ded087}
@@ -98,4 +98,4 @@ audio{display:block;width:100%;max-width:640px;margin:.75rem 0 1.5rem}
 <p>Los gráficos van todos comprimidos, con dos intérpretes propios: 0x439C vuelca a la VRAM y 0x43D8 a la tabla de nombres. El segundo tiene un detalle bonito: entrando por 0x43F3 escribe ceros en vez del dato, así que <b>el mismo guión sirve para pintar y para borrar</b>.</p>
 <h2 id="el-sonido-es-el-reproductor-de-tres-canales-de-konami">El sonido es el reproductor de tres canales de Konami</h2>
 <p>0x79D8 y 0x7A7A mueven el reproductor PSG de la casa, con <b>doce</b> bytes de estado por canal —<code>ld de,0x000C</code> en 0x7A89, y las bases 0xE01A, 0xE026 y 0xE032 van de doce en doce—. Es el mismo armazón que Konami repartía entre sus cartuchos de MSX.</p>
-<footer><p><em>Hyper Rally</em> lo publico Konami para MSX; su numero de catalogo es RC-718 y son 16 KB. Todos los derechos sobre el juego siguen siendo de sus titulares. Este trabajo es de preservacion, estudio y documentacion, y la imagen del cartucho no se distribuye.</p></footer></div>
+<footer><p><em>Sky Jaguar</em> lo publico Konami para MSX; su numero de catalogo es RC-721 y son 16 KB. Todos los derechos sobre el juego siguen siendo de sus titulares. Este trabajo es de preservacion, estudio y documentacion, y la imagen del cartucho no se distribuye.</p></footer></div>

@@ -1,6 +1,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Empezar — Hyper Rally (Konami, 1985)</title>
+<title>Empezar — Sky Jaguar (Konami, 1984)</title>
 <style>
 :root{--tinta:#cfd0d4;--suave:#83868f;--fondo:#000;--panel:#0c0e13;--linea:#23262e;
   --rojo:#ff897d;--cyan:#65dbef;--verde:#3eb849;--oro:#ded087}
@@ -98,4 +98,4 @@ make web        rehace esta web desde la ROM y las notas</code></pre>
 <h2 id="como-esta-montado">Cómo está montado</h2>
 <p>El listado no se edita a mano: <code>tools/mkasm.py</code> lo arma desde un trazado de flujo y un fichero de notas ancladas a direcciones, así que los comentarios sobreviven a un retrazado. El trazador sigue el flujo desde los puntos de entrada; los que no puede deducir solo —el gancho de la interrupción, las tablas de saltos y las rutinas a las que se llega por <code>push</code>/<code>ret</code>— van declarados en <code>src/skyjaguar.entries</code>, cada uno con su motivo.</p>
 <p>Las imágenes de esta web tampoco son capturas: se dibujan ejecutando en Python los mismos descompresores que corre el Z80, leyendo los bytes del cartucho. Si un rango o un formato estuvieran mal, saldría ruido en vez del paisaje.</p>
-<footer><p><em>Hyper Rally</em> lo publico Konami para MSX; su numero de catalogo es RC-718 y son 16 KB. Todos los derechos sobre el juego siguen siendo de sus titulares. Este trabajo es de preservacion, estudio y documentacion, y la imagen del cartucho no se distribuye.</p></footer></div>
+<footer><p><em>Sky Jaguar</em> lo publico Konami para MSX; su numero de catalogo es RC-721 y son 16 KB. Todos los derechos sobre el juego siguen siendo de sus titulares. Este trabajo es de preservacion, estudio y documentacion, y la imagen del cartucho no se distribuye.</p></footer></div>

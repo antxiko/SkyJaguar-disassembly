@@ -25,7 +25,9 @@ ORG, FIN = 0x4000, 0x8000
 OTROS_JUEGOS = ("Pitfall", "Temptations", "Stardust", "Ale Hop", "Colt 36",
                 "Middle Earth", "Monkey", "F-1 Spirit", "Athletic",
                 "Antarctic", "Pippols", "Frogger", "Time Pilot",
-                "Super Cobra", "Billiards", "Mahjong")
+                "Super Cobra", "Billiards", "Mahjong", "Hyper Rally",
+                "Hyper Olympic", "Hyper Sports", "Cabbage Patch",
+                "Demonia", "Nemesis", "Golf", "Tennis")
 
 
 def asm():
