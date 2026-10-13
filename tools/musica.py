@@ -37,7 +37,11 @@ PAGINA = motor_musica.pagina_basica(
     [("la música de arranque (0x93) entera, 293 cuadros, tres veces: pedida "
       "a la fuerza y dos tal como el juego la pide",
       "the start-up tune (0x93), whole, 293 frames, three times: forced, and "
-      "twice as the game asks for it")],
+      "twice as the game asks for it"),
+     ("los primeros 210 cuadros del fin de partida (0x99, que dura 284), "
+      "hasta que el juego pide otro sonido encima",
+      "the first 210 frames of game over (0x99, which lasts 284), until "
+      "the game asks for another sound on top")],
     [("Cómo se pide una pieza",
       "`PIDE_SONIDO` recibe el número en A y solo suena con partida en marcha "
       "(bit 6 de 0xE002) y sin el avión muriendo; `PONE_SONIDO` salta esas "
@@ -47,8 +51,8 @@ PAGINA = motor_musica.pagina_basica(
       "PSG, que el arranque deja en 0xB8. Las pistas «de la tabla» están en "
       "la tabla de pistas pero ninguna rutina las pide con un `ld a`; se "
       "omiten la 0x9A y la 0x9B, de minutos de duración y casi sin notas. "
-      "Solo hay una pieza cotejada con openMSX, la 0x93; las demás salen del "
-      "mismo motor, pero no se ha comparado cada una.",
+      "Hay dos piezas cotejadas con openMSX, la 0x93 y la 0x99 (esta, en sus 210 primeros cuadros); las demás salen "
+      "del mismo motor, pero no se ha comparado cada una.",
       "How a piece is asked for",
       "`PIDE_SONIDO` takes the number in A and only sounds with a game "
       "running (bit 6 of 0xE002) and the plane not dying; `PONE_SONIDO` "
@@ -58,7 +62,7 @@ PAGINA = motor_musica.pagina_basica(
       "mixer, which start-up leaves at 0xB8. The tracks marked «in the "
       "table» are in the track table but no routine asks for them with an "
       "`ld a`; 0x9A and 0x9B, minutes long and nearly without notes, are left "
-      "out. Only one piece has been checked against openMSX, 0x93; the rest "
+      "out. Two pieces have been checked against openMSX, 0x93 and 0x99 (the latter in its first 210 frames); the rest "
       "come out of the same engine but each has not been compared.")])
 
 CFG = dict(rom="skyjaguar.rom", org=0x4000, frame=0x7A7A, pide=0x79E5,

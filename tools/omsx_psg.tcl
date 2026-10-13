@@ -5,6 +5,7 @@
 #   F                 cada llamada al motor de cada cuadro ($PSG_FRAME)
 #   S nn              cada llamada a "pedir sonido" ($PSG_PIDE): A
 #   W r v             cada escritura al PSG (puerto 0xA0 el registro, 0xA1 el dato)
+#   C o v             cada escritura al SCC (0x9800 + o)
 # $PSG_FRAME_BYTE y $PSG_PIDE_BYTE: el byte que debe haber en esas direcciones
 # (para saber que el cartucho esta mapeado). $PSG_FUERZA: lista de numeros que
 # sustituyen a la A de las primeras peticiones (para oir piezas sin jugar).
@@ -22,6 +23,8 @@ set ::log {}
 set ::reg 0
 debug set_watchpoint write_io 0xA0 {} { set ::reg [expr {$::wp_last_value & 0x0F}] }
 debug set_watchpoint write_io 0xA1 {} { lappend ::log "W $::reg $::wp_last_value" }
+# el SCC (cartuchos Konami SCC): C desplazamiento dato, con 0x9800 = 0
+debug set_watchpoint write_mem {0x9800 0x98FF} {} { lappend ::log "C [expr {$::wp_last_address - 0x9800}] $::wp_last_value" }
 # $PSG_POKE "w:E020=7A83;w:E028=7ADB;b:E027=04" y $PSG_POKE_NUM: juegos sin rutina de
 # peticion: al llegar al cuadro $PSG_POKE_F el sondeo escribe esas fichas, como las
 # escribe el juego, y apunta "S num" justo antes de ese cuadro.

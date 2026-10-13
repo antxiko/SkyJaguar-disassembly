@@ -6,13 +6,14 @@ Todo lo que suena aquí sale de ejecutar el motor de sonido del cartucho (`VUELC
 
 Las escrituras al PSG se han comparado cuadro a cuadro con las de openMSX (C-BIOS MSX1 japonés). En todos los cuadros el PSG queda igual:
 
-- la música de arranque (0x93) entera, 293 cuadros, tres veces: pedida a la fuerza y dos tal como el juego la pide.
+- la música de arranque (0x93) entera, 293 cuadros, tres veces: pedida a la fuerza y dos tal como el juego la pide;
+- los primeros 210 cuadros del fin de partida (0x99, que dura 284), hasta que el juego pide otro sonido encima.
 
 El timbre no está cotejado: es el de un AY-3-8910 de manual, no una grabación del emulador. Las sondas están en `tools/omsx_psg.tcl` y `tools/coteja_psg.py`.
 
 ## Cómo se pide una pieza
 
-`PIDE_SONIDO` recibe el número en A y solo suena con partida en marcha (bit 6 de 0xE002) y sin el avión muriendo; `PONE_SONIDO` salta esas comprobaciones y reparte el sonido entre los canales. Los números bajos son efectos y del 0x88 en adelante hay música. Cada canal ocupa doce bytes desde 0xE018 y 0xE03C guarda la copia del mezclador del PSG, que el arranque deja en 0xB8. Las pistas «de la tabla» están en la tabla de pistas pero ninguna rutina las pide con un `ld a`; se omiten la 0x9A y la 0x9B, de minutos de duración y casi sin notas. Solo hay una pieza cotejada con openMSX, la 0x93; las demás salen del mismo motor, pero no se ha comparado cada una.
+`PIDE_SONIDO` recibe el número en A y solo suena con partida en marcha (bit 6 de 0xE002) y sin el avión muriendo; `PONE_SONIDO` salta esas comprobaciones y reparte el sonido entre los canales. Los números bajos son efectos y del 0x88 en adelante hay música. Cada canal ocupa doce bytes desde 0xE018 y 0xE03C guarda la copia del mezclador del PSG, que el arranque deja en 0xB8. Las pistas «de la tabla» están en la tabla de pistas pero ninguna rutina las pide con un `ld a`; se omiten la 0x9A y la 0x9B, de minutos de duración y casi sin notas. Hay dos piezas cotejadas con openMSX, la 0x93 y la 0x99 (esta, en sus 210 primeros cuadros); las demás salen del mismo motor, pero no se ha comparado cada una.
 
 ## Las músicas
 
