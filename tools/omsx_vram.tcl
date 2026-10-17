@@ -25,7 +25,7 @@ proc opcion {nombre porDefecto} {
     return $porDefecto
 }
 
-set ::SALIDA [opcion SJ_SALIDA {C:/Users/Antxiko/Documents/DES_ASM/SKYJAGUAR_DISAM/work/omsx}]
+set ::SALIDA [opcion SJ_SALIDA {C:/Users/Antxiko/Documents/DES_ASM/desensamblados/SKYJAGUAR_DISAM/work/omsx}]
 file mkdir $::SALIDA
 set ::n 0
 
