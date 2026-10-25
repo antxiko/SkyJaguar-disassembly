@@ -55,3 +55,30 @@ paints and erases**.
 channel —`ld de,0x000C` at 0x7A89, and the bases 0xE01A, 0xE026 and 0xE032 sit
 twelve apart—. It is the same framework Konami spread across its MSX
 cartridges.
+
+## Code shared with other Konami cartridges
+
+This disassembly has been compared, instruction by instruction, with
+every other Konami one in the series. A block counts when the same
+instructions, at least six of them from a label to its `ret` or its
+unconditional jump, are in both cartridges; the addresses are left
+aside, because they change from one cartridge to the next. Of the
+other 57, **54** have at least one block in common with this one;
+these are the ones that share the most:
+
+| Cartridge | Blocks | Instructions | For example (here = there) |
+|---|---:|---:|---|
+| [Yie Ar Kung-Fu](https://antxiko.github.io/YieArKungFu-disassembly/) | 26 | 356 | `PASO_DE_ESTADO` (0x40A5) = `un_cuadro_de_juego` |
+| [Hyper Sports 3](https://antxiko.github.io/HyperSports3-disassembly/) | 17 | 233 | `LEE_TECLADO` (0x4479) = `teclado_del_jugador_1` |
+| [Yie Ar Kung-Fu II](https://antxiko.github.io/YieArKungFu2-disassembly/) | 17 | 180 | `LEE_TECLADO` (0x4479) = `lee_las_filas_7_y_8_del_teclado` |
+| [Hyper Sports 2](https://antxiko.github.io/HyperSports2-disassembly/) | 16 | 224 | `REPARTE_CANALES` (0x7A07) = `SOLO_SI_PESA_MAS` |
+| [Mopi Ranger](https://antxiko.github.io/MopiRanger-disassembly/) | 16 | 211 | `SUMA_PUNTOS` (0x424C) = `suma_al_marcador` |
+| [The Goonies](https://antxiko.github.io/Goonies-disassembly/) | 15 | 184 | `PINTA_DOS_CIFRAS` (0x42F0) = `escribe_en_bcd` |
+| [Knightmare](https://antxiko.github.io/Knightmare-disassembly/) | 15 | 162 | `INTERRUPCION` (0x4043) = `cada_cuadro` |
+| [Konami’s Soccer](https://antxiko.github.io/KonamisSoccer-disassembly/) | 14 | 124 | `PASO_CORTINILLA` (0x4505) = `sube_el_logotipo_una_fila` |
+| [Konami's Ping Pong](https://antxiko.github.io/KonamisPingPong-disassembly/) | 13 | 140 | `LEE_TECLADO` (0x4479) = `lee_teclado_1` |
+| [Hyper Rally](https://antxiko.github.io/HyperRally-disassembly/) | 12 | 124 | `INTERRUPCION` (0x4043) = `INT` |
+
+The whole matrix, the 58 cartridges against each other, is on
+[The routines](https://antxiko.github.io/MSX-disassembly-database/THE-ROUTINES.html) in the series database, along
+with the method and the program that measures it.

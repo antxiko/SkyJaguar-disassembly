@@ -55,3 +55,30 @@ para pintar y para borrar**.
 por canal —`ld de,0x000C` en 0x7A89, y las bases 0xE01A, 0xE026 y 0xE032 van de
 doce en doce—. Es el mismo armazón que Konami repartía entre sus
 cartuchos de MSX.
+
+## Código compartido con otros cartuchos de Konami
+
+Este desensamblado se ha comparado, instrucción por instrucción, con
+todos los demás de Konami de la serie. Cuenta un bloque cuando las
+mismas instrucciones, al menos seis desde una etiqueta hasta su `ret`
+o su salto sin condición, están en los dos cartuchos; las direcciones
+no se miran, porque cambian de un cartucho a otro. De los otros 57,
+**54** tienen al menos un bloque en común con este; estos son los
+que más comparten:
+
+| Cartucho | Bloques | Instrucciones | Por ejemplo (aquí = allí) |
+|---|---:|---:|---|
+| [Yie Ar Kung-Fu](https://antxiko.github.io/YieArKungFu-disassembly/es/) | 26 | 356 | `PASO_DE_ESTADO` (0x40A5) = `un_cuadro_de_juego` |
+| [Hyper Sports 3](https://antxiko.github.io/HyperSports3-disassembly/es/) | 17 | 233 | `LEE_TECLADO` (0x4479) = `teclado_del_jugador_1` |
+| [Yie Ar Kung-Fu II](https://antxiko.github.io/YieArKungFu2-disassembly/es/) | 17 | 180 | `LEE_TECLADO` (0x4479) = `lee_las_filas_7_y_8_del_teclado` |
+| [Hyper Sports 2](https://antxiko.github.io/HyperSports2-disassembly/es/) | 16 | 224 | `REPARTE_CANALES` (0x7A07) = `SOLO_SI_PESA_MAS` |
+| [Mopi Ranger](https://antxiko.github.io/MopiRanger-disassembly/es/) | 16 | 211 | `SUMA_PUNTOS` (0x424C) = `suma_al_marcador` |
+| [The Goonies](https://antxiko.github.io/Goonies-disassembly/es/) | 15 | 184 | `PINTA_DOS_CIFRAS` (0x42F0) = `escribe_en_bcd` |
+| [Knightmare](https://antxiko.github.io/Knightmare-disassembly/es/) | 15 | 162 | `INTERRUPCION` (0x4043) = `cada_cuadro` |
+| [Konami’s Soccer](https://antxiko.github.io/KonamisSoccer-disassembly/es/) | 14 | 124 | `PASO_CORTINILLA` (0x4505) = `sube_el_logotipo_una_fila` |
+| [Konami's Ping Pong](https://antxiko.github.io/KonamisPingPong-disassembly/es/) | 13 | 140 | `LEE_TECLADO` (0x4479) = `lee_teclado_1` |
+| [Hyper Rally](https://antxiko.github.io/HyperRally-disassembly/es/) | 12 | 124 | `INTERRUPCION` (0x4043) = `INT` |
+
+La matriz entera, los 58 cartuchos entre sí, está en
+[Las rutinas](https://antxiko.github.io/MSX-disassembly-database/es/LAS-RUTINAS.html) de la base de datos de la
+serie, con el método y el programa que la mide.
